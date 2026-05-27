@@ -33,21 +33,47 @@ from .simulate import SimConfig, run_trajectory
 
 
 # --------------------------------------------------------------------------
-# styling
+# styling -- matches the manuscript figures (IEEEtran, serif, orange/teal)
 # --------------------------------------------------------------------------
 def _style():
+    """Apply the manuscript figure style.
+
+    Serif text to sit with the IEEEtran body font; the burnt-orange / teal
+    pair of the Section V figures.  Note the two colours are close in
+    luminance (they read alike in greyscale and for some colour-vision
+    deficiencies), so every figure also separates the two series by
+    linewidth or linestyle -- colour is never the sole distinguishing
+    channel.
+    """
     plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["DejaVu Serif", "Times New Roman", "Times"],
+        "mathtext.fontset": "dejavuserif",
         "font.size": 9,
+        "axes.titlesize": 9,
+        "axes.labelsize": 9,
         "axes.linewidth": 0.7,
+        "axes.grid": True,
+        "grid.color": "#d9d9d9",
+        "grid.linewidth": 0.5,
         "lines.linewidth": 1.0,
+        "legend.fontsize": 8,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
         "figure.dpi": 150,
         "savefig.bbox": "tight",
     })
 
 
-_C_UNREG = "#c0392b"      # unregularized -- red
-_C_REG = "#1f618d"        # regularized   -- blue
-_C_AUX = "#7f8c8d"        # auxiliary lines -- grey
+# manuscript palette -- sampled from the Section V figures
+_C_UNREG = "#d4691e"      # unregularized / first series -- burnt orange
+_C_REG = "#1a9988"        # regularized   / second series -- teal
+_C_BLUE = "#1f6aa5"       # tertiary series -- blue (E1/E3 ensembles)
+_C_AUX = "#7f7f7f"        # auxiliary lines (funnel, references) -- grey
+
+# rate-axis label: time is in units of the measurement rate Gamma_m = 1
+_T_LABEL = r"time  $\Gamma_m t$"
+_DT_LABEL = r"integration step  $\Gamma_m \Delta t$"
 
 
 # --------------------------------------------------------------------------
@@ -81,7 +107,7 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     # panel 1: coherent control u_1(t)
     ax[0].plot(tr_un.t, tr_un.u[:, 0], color=_C_UNREG, lw=0.6,
                label="unregularized")
-    ax[0].plot(tr_re.t, tr_re.u[:, 0], color=_C_REG, lw=1.2,
+    ax[0].plot(tr_re.t, tr_re.u[:, 0], color=_C_REG, lw=1.4, ls="--",
                label="regularized")
     ax[0].set_ylabel(r"coherent control  $u_1(t)$")
     ax[0].set_ylim(-1.25, 1.25)
@@ -93,7 +119,7 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
                label=r"funnel $\epsilon(t)$")
     ax[1].plot(tr_un.t, tr_un.xi, color=_C_UNREG, lw=1.0,
                label=r"$\xi(t)$, unregularized")
-    ax[1].plot(tr_re.t, tr_re.xi, color=_C_REG, lw=1.0,
+    ax[1].plot(tr_re.t, tr_re.xi, color=_C_REG, lw=1.4, ls="--",
                label=r"$\xi(t)$, regularized")
     ax[1].set_ylabel(r"conditional infidelity  $\xi(t)$")
     ax[1].legend(loc="upper right", frameon=False, fontsize=8)
@@ -104,7 +130,7 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     ax[2].plot(tr_re.t, np.abs(tr_re.betaH[:, 0]), color=_C_REG, lw=0.8,
                label="regularized")
     ax[2].set_ylabel(r"coherent gain  $|\beta^H_\xi(t)|$")
-    ax[2].set_xlabel(r"time  $t$")
+    ax[2].set_xlabel(_T_LABEL)
     ax[2].legend(loc="upper right", frameon=False, fontsize=8)
 
     fig.align_ylabels(ax)
@@ -143,16 +169,16 @@ def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
     for tr in trajs[:n_show]:
         breached = not tr.confined
         ax[0].plot(tr.t, tr.xi,
-                   color=(_C_UNREG if breached else _C_REG),
+                   color=(_C_UNREG if breached else _C_AUX),
                    lw=(0.7 if breached else 0.4),
-                   alpha=(0.9 if breached else 0.45),
+                   alpha=(0.9 if breached else 0.55),
                    zorder=(3 if breached else 1))
-    ax[0].plot(t_curve, eps_curve, color="k", lw=1.4,
+    ax[0].plot(t_curve, eps_curve, color="k", lw=1.6,
                label=r"funnel $\epsilon(t)$")
-    ax[0].plot([], [], color=_C_REG, lw=0.8, label=r"$\xi(t)$, confined")
+    ax[0].plot([], [], color=_C_AUX, lw=0.8, label=r"$\xi(t)$, confined")
     ax[0].plot([], [], color=_C_UNREG, lw=0.8,
                label=r"$\xi(t)$, breaching")
-    ax[0].set_ylabel(r"conditional infidelity  $\xi(t)$")
+    ax[0].set_ylabel(r"infidelity  $\xi$")
     ax[0].set_ylim(0, None)
     ax[0].legend(loc="upper right", frameon=False, fontsize=8)
     ax[0].set_title("E1  qubit ground-state confinement", fontsize=9)
@@ -163,10 +189,10 @@ def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
     for tr in trajs:
         inside += (tr.xi < tr.eps).astype(float)
     inside /= M
-    ax[1].plot(t, inside, color=_C_REG, lw=1.0)
+    ax[1].plot(t, inside, color=_C_BLUE, lw=1.0)
     ax[1].axhline(1.0, color=_C_AUX, lw=0.5, ls=":")
     ax[1].set_ylabel("confinement\nfrequency")
-    ax[1].set_xlabel(r"time  $t$")
+    ax[1].set_xlabel(_T_LABEL)
     ax[1].set_ylim(0, 1.05)
 
     label = f"ensemble  $M = {M}$"
@@ -210,9 +236,9 @@ def fig_chatter_robustness(outdir: str, seed: int = 7,
         ff_b.append(np.mean(np.diff(np.sign(tb.u[:, 0])) != 0))
 
     fig, ax = plt.subplots(figsize=(5.0, 3.4))
-    ax.semilogx(dts, ff_q, "o-", color=_C_REG, label="qubit")
+    ax.semilogx(dts, ff_q, "o-", color=_C_BLUE, label="qubit")
     ax.semilogx(dts, ff_b, "s-", color=_C_UNREG, label=r"Bell, $|00\rangle$")
-    ax.set_xlabel(r"integration step  $\Delta t$")
+    ax.set_xlabel(_DT_LABEL)
     ax.set_ylabel("control sign-flip fraction")
     ax.set_ylim(0, 1)
     ax.invert_xaxis()       # Delta t -> 0 to the right
@@ -299,11 +325,11 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
                            gridspec_kw={"height_ratios": [3, 2]})
 
     # panel 1: demand vs the boundary-shell margin
-    ax[0].plot(t, demand, color=_C_UNREG, lw=1.4,
+    ax[0].plot(t, demand, color=_C_AUX, lw=1.2, ls="--",
                label=r"$|\dot\epsilon(t)|$  funnel demand")
-    ax[0].plot(t, V_med, color=_C_REG, lw=1.0,
+    ax[0].plot(t, V_med, color=_C_REG, lw=1.2,
                label=r"$\mathcal{V}(t)$  median on boundary shell")
-    ax[0].plot(t, V_min, color=_C_REG, lw=0.8, ls="--",
+    ax[0].plot(t, V_min, color=_C_REG, lw=0.8, ls=":",
                label=r"$\mathcal{V}(t)$  worst on boundary shell")
     ax[0].axhline(0.0, color=_C_AUX, lw=0.4)
     ax[0].set_ylabel("contraction rate")
@@ -322,7 +348,7 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
         ax[1].axvline(bt, color=_C_AUX, lw=0.6, ls=":",
                       label="E1 breach onset" if k == 0 else None)
     ax[1].set_ylabel(r"$\mathcal{V}_{\min} - |\dot\epsilon|$")
-    ax[1].set_xlabel(r"time  $t$")
+    ax[1].set_xlabel(_T_LABEL)
     ax[1].legend(loc="lower right", frameon=False, fontsize=8)
 
     fig.align_ylabels(ax)
@@ -415,8 +441,8 @@ def fig_robustness(outdir: str, plant_kappas, freq_rob, ci_rob,
     exc_rob = np.asarray(exc_rob, float)
     exc_opt = np.asarray(exc_opt, float)
 
-    fig, ax = plt.subplots(2, 1, figsize=(5.4, 5.8),
-                           gridspec_kw={"height_ratios": [1, 1]})
+    fig, ax = plt.subplots(2, 1, figsize=(5.4, 6.2),
+                           gridspec_kw={"height_ratios": [1, 1], "hspace": 0.42})
 
     # ---- panel A: confinement frequency, grouped bars ------------------
     x = np.arange(len(plant_kappas))
@@ -434,25 +460,26 @@ def fig_robustness(outdir: str, plant_kappas, freq_rob, ci_rob,
     ax[0].set_xticklabels([fr"$\kappa = {k:g}$" for k in plant_kappas])
     ax[0].set_xlabel(r"true plant dissipative rate $\kappa$")
     ax[0].set_ylabel("confinement\nfrequency")
-    ax[0].set_ylim(0.0, 1.10)
-    ax[0].legend(frameon=False, fontsize=7.5, loc="lower left")
+    ax[0].set_ylim(0.0, 1.18)
+    ax[0].legend(frameon=False, fontsize=7.5, loc="lower left", ncol=2)
     ax[0].set_title("Robustness to dissipative-rate uncertainty", fontsize=9)
 
     # ---- panel B: excursion severity on the worst-case plant -----------
-    top = max(exc_rob.max(), exc_opt.max(), 1.05) * 1.05
+    top = max(exc_rob.max(), exc_opt.max(), 1.05) * 1.10
     bins = np.linspace(0.0, top, 26)
     ax[1].hist(exc_rob, bins=bins, color=_C_REG, alpha=0.75,
                label=f"robust  (worst {exc_rob.max():.2f})")
     ax[1].hist(exc_opt, bins=bins, color=_C_UNREG, alpha=0.55,
                label=f"optimistic  (worst {exc_opt.max():.2f})")
     ax[1].axvline(1.0, color="k", lw=0.8, ls="--")
+    ax[1].set_ylim(top=ax[1].get_ylim()[1] * 1.25)
     ymax = ax[1].get_ylim()[1]
-    ax[1].text(1.04, ymax * 0.94, "funnel\nboundary", fontsize=7,
-               va="top", ha="left")
+    ax[1].text(0.96, ymax * 0.96, "funnel\nboundary", fontsize=7,
+               va="top", ha="right")
     ax[1].set_xlabel(r"per-path maximum margin ratio  $\max_t\,\xi/\epsilon$"
                      fr"   (worst-case plant $\kappa = {worst_kappa:g}$)")
     ax[1].set_ylabel("count")
-    ax[1].legend(frameon=False, fontsize=7.5, loc="upper right")
+    ax[1].legend(frameon=False, fontsize=7.5, loc="upper left")
 
     fig.align_ylabels(ax)
     path = os.path.join(outdir, "fig_robustness.pdf")
