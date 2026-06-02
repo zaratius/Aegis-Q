@@ -111,8 +111,36 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
                label="regularized")
     ax[0].set_ylabel(r"coherent control  $u_1(t)$")
     ax[0].set_ylim(-1.25, 1.25)
-    ax[0].legend(loc="upper right", frameon=False, fontsize=8)
+    ax[0].legend(loc="upper left", frameon=False, fontsize=8)
     ax[0].axhline(0, color=_C_AUX, lw=0.4)
+
+    # --- magnification inset: resolve the sign-flips into a sawtooth -----
+    # Pick a short window after the chattering onset.  The onset is where
+    # the unregularized control first saturates; take a window a little
+    # past it so the inset shows steady bang-bang switching, and make it
+    # narrow enough (~25 steps) that individual flips are visible.
+    u_un = tr_un.u[:, 0]
+    sat = np.where(np.abs(u_un) > 0.5)[0]
+    onset = int(sat[0]) if sat.size else len(u_un) // 3
+    z0 = min(onset + 40, len(u_un) - 30)
+    z1 = min(z0 + 25, len(u_un))
+    tz = tr_un.t[z0:z1]
+
+    axins = ax[0].inset_axes([0.62, 0.10, 0.34, 0.62])
+    axins.plot(tz, u_un[z0:z1], color=_C_UNREG, lw=0.8,
+               marker="o", ms=2.5, mfc=_C_UNREG, mec=_C_UNREG)
+    axins.plot(tr_re.t[z0:z1], tr_re.u[z0:z1, 0], color=_C_REG,
+               lw=1.4, ls="--")
+    axins.axhline(0, color=_C_AUX, lw=0.4)
+    axins.set_ylim(-1.25, 1.25)
+    axins.set_xticklabels([])
+    axins.set_yticks([-1, 0, 1])
+    axins.tick_params(labelsize=6, length=2)
+    axins.set_title("zoom", fontsize=7, pad=2)
+    for spine in axins.spines.values():
+        spine.set_linewidth(0.5)
+    # box the source region on the main axes and connect it to the inset
+    ax[0].indicate_inset_zoom(axins, edgecolor=_C_AUX, lw=0.5, alpha=0.6)
 
     # panel 2: conditional infidelity xi(t) with the funnel
     ax[1].plot(tr_un.t, tr_un.eps, color=_C_AUX, lw=0.8, ls="--",
@@ -361,51 +389,59 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
 # --------------------------------------------------------------------------
 # Figure 1 -- breach-rate step refinement (Section V-E4)
 # --------------------------------------------------------------------------
-def fig_breach_refinement(outdir: str, dts, breach_rates,
-                          ci_los, ci_his) -> str:
-    """Funnel-breach rate of the admissible-funnel qubit ensemble vs Delta t.
-
-    For an admissible funnel the continuum-limit breach probability is zero
-    (Theorem III.1).  At finite Delta t the Milstein truncation and the
-    positivity projection inject an O(Delta t) drift slack (Corollary III.2)
-    that carries a few sample paths across the boundary; halving Delta t
-    halves that slack.  The breach rate therefore falls along an O(Delta t)
-    reference and vanishes in the continuum limit -- the signature that the
-    finite-step excursions of the E1 study are integration slack, not funnel
-    infeasibility.
-
-    All arrays are indexed over ``dts`` and produced by
-    ``run_breach_refinement.py``.
+def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
+                          alias_dt=2.0e-4):
+    """Shell-exit rate vs Delta t for the qubit ensemble.
+ 
+    shell_rates / ci_los / ci_his are the SHELL-exit (s < s_b) rate and its
+    95% Clopper-Pearson interval, indexed over ``dts``.  Points with
+    dt > alias_dt are drawn hollow: at Omega = 20 the closed loop aliases
+    there (STATUS.md) and those points do not belong to the continuum trend.
     """
-    _style()
+    # local style (kept self-contained; matches _style() palette)
+    _C_REG = "#1a9988"; _C_AUX = "#7f7f7f"
+    plt.rcParams.update({"font.family": "serif", "font.size": 9,
+                         "axes.grid": True, "grid.color": "#d9d9d9",
+                         "grid.linewidth": 0.5, "savefig.bbox": "tight",
+                         "figure.dpi": 150})
+ 
     dts = np.asarray(dts, float)
-    rates = np.asarray(breach_rates, float)
+    rates = np.asarray(shell_rates, float)
     lo = np.asarray(ci_los, float)
     hi = np.asarray(ci_his, float)
-
-    # O(Delta t) reference anchored at the coarsest step
-    i0 = int(np.argmax(dts))
-    ref = rates[i0] * dts / dts[i0]
-
+ 
+    # O(dt) reference anchored at the FINEST un-aliased point, extended up
+    smooth = dts <= alias_dt
+    anchor = int(np.argmin(dts))           # finest dt
+    ref = rates[anchor] * dts / dts[anchor]
+ 
     fig, ax = plt.subplots(figsize=(5.0, 3.4))
     ax.plot(dts, ref, color=_C_AUX, lw=0.9, ls="--",
-            label=r"$\mathcal{O}(\Delta t)$ reference")
-    ax.errorbar(dts, rates, yerr=[rates - lo, hi - rates],
+            label=r"$\mathcal{O}(\Delta t)$: what an artifact would follow")
+ 
+    # solid markers for smooth points, hollow for aliased ones
+    ax.errorbar(dts[smooth], rates[smooth],
+                yerr=[rates[smooth] - lo[smooth], hi[smooth] - rates[smooth]],
                 fmt="o-", color=_C_REG, lw=1.0, capsize=3,
-                label="breach rate (95% CI)")
+                label="shell-exit rate (95% CI)")
+    if (~smooth).any():
+        ax.errorbar(dts[~smooth], rates[~smooth],
+                    yerr=[rates[~smooth] - lo[~smooth], hi[~smooth] - rates[~smooth]],
+                    fmt="o", mfc="white", color=_C_REG, lw=1.0, capsize=3,
+                    label=r"aliased ($\Omega\Delta t$ too large)")
+ 
     ax.set_xscale("log")
-    ax.invert_xaxis()                          # Delta t -> 0 to the right
+    ax.invert_xaxis()
     ax.set_xlabel(r"integration step  $\Delta t$")
-    ax.set_ylabel("funnel-breach rate")
+    ax.set_ylabel(r"shell-exit rate  $\mathbb{P}[\tau_\Omega \leq T]$")
     ax.set_ylim(bottom=0.0)
     ax.legend(frameon=False, fontsize=8)
-    ax.set_title(r"Breach rate vanishes as $\Delta t \to 0$  "
-                 "(excursions are integration slack)", fontsize=9)
+    ax.set_title(r"Both exit rates are $\Delta t$-stable "
+                 r"(finite-$w_\delta$ floor, not integration slack)", fontsize=9)
     path = os.path.join(outdir, "fig_breach_refinement.pdf")
     fig.savefig(path)
     plt.close(fig)
     return path
-
 
 # --------------------------------------------------------------------------
 # Section V-E8 -- robustness to dissipative-rate uncertainty

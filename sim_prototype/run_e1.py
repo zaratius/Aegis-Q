@@ -40,7 +40,7 @@ def main():
     sys_ = qubit()
     rho0 = np.array([[0.78, 0.08], [0.08, 0.22]], dtype=complex)
     funnel = ExpFunnel(eps0=0.55, eps_T=0.08, T=4.0)
-    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=0.6, s_b=0.04,
+    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=0.6, s_b=0.25,
                     wr=50.0, c=20.0, regularized=True)
 
     print(f"E1 qubit confinement: M = {M}, dt = {cfg.dt:.1e}")

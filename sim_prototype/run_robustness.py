@@ -1,48 +1,29 @@
 """
 Robustness to dissipative-rate uncertainty: the Section V-E8 study.
 
-The engineered dissipation rate kappa of the qubit is uncertain within an
-interval [kappa_min, kappa_max].  kappa enters the QP only through the
-dissipative gain beta^D = -kappa xi (Lemma V.1), and the safety constraint
-is hardest to satisfy when beta^D is least negative, so the worst-case
-vertex of the uncertainty set is kappa = kappa_min.  Proposition IV.3 then
-gives a robust controller: it computes its coefficients from the worst-case
-model kappa = kappa_min, while the true plant evolves at an unknown kappa
-in the interval.
+REVISED: imports the SHARED study geometry (study_config) instead of the
+hard-coded (0.70, 0.12, s_b=0.25), which had the empty-shell bug
+(s_b > eps_T => Omega(T) empty).  Excursions are now read through
+exit_metrics so "worst xi/eps" is computed identically to the other studies.
 
-This script runs two controllers --
-
-  * robust      -- design model kappa = kappa_min
-  * optimistic  -- design model kappa = kappa_max
-
-against true plants at kappa in {kappa_min, kappa_mid, kappa_max}, reports
-the confinement frequency and the worst per-path excursion of each, and
-writes the Section V-E8 figure.
+The engineered dissipation rate kappa is uncertain within [kappa_min,
+kappa_max].  kappa enters the QP only through beta^D = -kappa xi (Lemma V.1),
+and the safety constraint is hardest when beta^D is least negative, so the
+worst-case vertex is kappa = kappa_min.  The robust controller designs for
+kappa_min; the optimistic one for kappa_max.
 
     python scripts/run_robustness.py [M]             # M defaults to 40
-
-Findings (see STATUS.md):
-  - The robust controller, which never sees the true kappa, confines the
-    ensemble across the whole uncertainty interval.  At its design point
-    kappa = kappa_min the run reduces to the nominal qubit study.
-  - On the worst-case plant the robust and optimistic controllers confine
-    at comparable frequency, but differ sharply in the *severity* of the
-    failures: the optimistic controller, having over-estimated the
-    dissipative authority, cannot arrest a path drifting toward the
-    boundary, so its worst excursion is far larger.  This is the
-    robustness statement appropriate to a safety setting -- Proposition
-    IV.3 bounds the worst-case drift, hence the worst-case excursion, by
-    the worst-case model.
-  - The closed form is preserved throughout: the only change between the
-    two controllers is the value of beta^D fed to the master equation, so
-    robustness costs nothing per step.
 """
 import sys, os, time
 import numpy as np
 from scipy import stats
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from quantumdbc import qubit, ExpFunnel, SimConfig, run_trajectory
+from quantumdbc import qubit, SimConfig, run_trajectory
+from quantumdbc.study_config import (
+    QUBIT_FUNNEL, QUBIT_SB, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
+)
+from quantumdbc.exit_metrics import exit_metrics
 from quantumdbc.figures import fig_robustness
 
 
@@ -56,16 +37,18 @@ def clopper_pearson(k, n, alpha=0.05):
 def ensemble(plant, design, cfg, rho0, M, seed0=5000):
     """Run an M-trajectory ensemble of (design-model controller, true plant).
 
-    Returns the confinement count and the array of per-path maximum margin
-    ratios max_t xi/epsilon.
+    Returns the confinement count (no funnel-exit) and the array of per-path
+    maximum margin ratios max_t xi/eps, both via exit_metrics so the metric
+    matches the rest of the study.
     """
     nconf = 0
     exc = np.empty(M)
     for k in range(M):
         tr = run_trajectory(plant, cfg, rho0, seed=seed0 + k,
                             store=True, design_sys=design)
-        nconf += tr.confined
-        exc[k] = float(np.max(tr.xi / tr.eps))
+        m = exit_metrics(tr, cfg.s_b)
+        nconf += (not m["funnel_exit"])          # confined := never exited funnel
+        exc[k] = m["runmax"]
     return nconf, exc
 
 
@@ -74,19 +57,18 @@ def main():
     kappa_min, kappa_mid, kappa_max = 3.0, 5.0, 8.0
     plant_kappas = (kappa_min, kappa_mid, kappa_max)
 
-    rho0 = np.array([[0.78, 0.08], [0.08, 0.22]], dtype=complex)
-    # Table II admissible qubit funnel
-    funnel = ExpFunnel(eps0=0.70, eps_T=0.12, T=4.0)
-    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=0.5, s_b=0.25,
-                    wr=50.0, c=20.0, wgamma=1.0, wdelta=1e3,
-                    regularized=True)
+    rho0   = np.array(QUBIT_RHO0, dtype=complex)
+    funnel = QUBIT_FUNNEL                             # shared geometry
+    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=QUBIT_LAM, s_b=QUBIT_SB,
+                    **QUBIT_WEIGHTS)
 
-    # the controllers differ only in the model kappa they are designed for
     design_rob = qubit(kappa=kappa_min)              # worst-case model
     design_opt = qubit(kappa=kappa_max)              # best-case model
 
     print(f"robustness study: M = {M}, uncertainty kappa in "
           f"[{kappa_min:g}, {kappa_max:g}]")
+    print(f"  funnel eps0={funnel.eps0}, eps_T={funnel.eps_T}, T={funnel.T}; "
+          f"s_b={QUBIT_SB}")
     print(f"  robust controller     -> design model kappa = {kappa_min:g}")
     print(f"  optimistic controller -> design model kappa = {kappa_max:g}\n")
 

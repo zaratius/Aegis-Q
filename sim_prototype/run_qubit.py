@@ -19,9 +19,13 @@ def main():
     sys_ = qubit()                       # Gamma_m=1, Omega=20, kappa=5, eta=0.6
     rho0 = np.array([[0.78, 0.08], [0.08, 0.22]], dtype=complex)
 
-    funnel = ExpFunnel(eps0=0.55, eps_T=0.06, T=6.0)
-    cfg = SimConfig(funnel=funnel, dt=1e-4, lam=0.6, s_b=0.04,
-                    wr=5.0, wgamma=1.0, wdelta=1e3, regularized=True)
+    funnel = ExpFunnel(eps0=0.70, eps_T=0.30, T=4.0)
+    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=0.5, s_b=0.25,
+                    wr=50.0, c=20.0, wgamma=1.0, wdelta=1e3, regularized=True)
+
+    xi0=0.22
+    assert funnel.eps(0) > xi0 + cfg.s_b, "CRITICAL: Problem 1 precondition violated. Funnel too narrow at t=0." 
+    assert cfg.s_b < funnel.eps(funnel.T), "CRITICAL: Buffer thicker than terminal funnel. Shell vanishes!"
 
     t0 = time.time()
     tr = run_trajectory(sys_, cfg, rho0, seed=1)
