@@ -47,21 +47,34 @@ def _style():
     """
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["DejaVu Serif", "Times New Roman", "Times"],
-        "mathtext.fontset": "dejavuserif",
-        "font.size": 9,
-        "axes.titlesize": 9,
-        "axes.labelsize": 9,
-        "axes.linewidth": 0.7,
+        "font.serif": ["DejaVu Serif"],
+        "mathtext.fontset": "cm",
+        "font.size": 8,
+        "axes.titlesize": 8,
+        "axes.labelsize": 8,
+        "axes.linewidth": 0.6,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.axisbelow": True,
         "axes.grid": True,
-        "grid.color": "#d9d9d9",
+        "axes.grid.axis": "y",
+        "grid.color": "#E9E9E9",
         "grid.linewidth": 0.5,
         "lines.linewidth": 1.0,
-        "legend.fontsize": 8,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
+        "legend.fontsize": 7,
+        "legend.frameon": False,
+        "legend.handlelength": 1.6,
+        "xtick.labelsize": 7,
+        "ytick.labelsize": 7,
+        "xtick.direction": "out",
+        "ytick.direction": "out",
+        "xtick.major.size": 2.5,
+        "ytick.major.size": 2.5,
+        "xtick.major.width": 0.6,
+        "ytick.major.width": 0.6,
         "figure.dpi": 150,
         "savefig.bbox": "tight",
+        "savefig.pad_inches": 0.02,
     })
 
 
@@ -69,11 +82,11 @@ def _style():
 _C_UNREG = "#d4691e"      # unregularized / first series -- burnt orange
 _C_REG = "#1a9988"        # regularized   / second series -- teal
 _C_BLUE = "#1f6aa5"       # tertiary series -- blue (E1/E3 ensembles)
-_C_AUX = "#7f7f7f"        # auxiliary lines (funnel, references) -- grey
+_C_AUX = "#8A8A8A"        # auxiliary lines (funnel, references) -- grey
 
 # rate-axis label: time is in units of the measurement rate Gamma_m = 1
-_T_LABEL = r"time  $\Gamma_m t$"
-_DT_LABEL = r"integration step  $\Gamma_m \Delta t$"
+_T_LABEL = r"time  $t$ ($\mu$s)"
+_DT_LABEL = r"integration step  $\Delta t$ (ns)"
 
 
 # --------------------------------------------------------------------------
@@ -102,17 +115,46 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     tr_un = run_trajectory(sys_, cfg_un, rho0, seed=seed)
     tr_re = run_trajectory(sys_, cfg_re, rho0, seed=seed)   # SAME seed
 
-    fig, ax = plt.subplots(3, 1, figsize=(5.4, 6.0), sharex=True)
+    fig, ax = plt.subplots(3, 1, figsize=(5.2, 4.2), sharex=True)
 
     # panel 1: coherent control u_1(t)
     ax[0].plot(tr_un.t, tr_un.u[:, 0], color=_C_UNREG, lw=0.6,
                label="unregularized")
     ax[0].plot(tr_re.t, tr_re.u[:, 0], color=_C_REG, lw=1.4, ls="--",
                label="regularized")
-    ax[0].set_ylabel(r"coherent control  $u_1(t)$")
+    ax[0].set_ylabel(r"control  $u_1(t)$")
     ax[0].set_ylim(-1.25, 1.25)
-    ax[0].legend(loc="upper right", frameon=False, fontsize=8)
+    ax[0].legend(loc="upper left", frameon=False, fontsize=8)
     ax[0].axhline(0, color=_C_AUX, lw=0.4)
+
+    # --- magnification inset: resolve the sign-flips into a sawtooth -----
+    # Pick a short window after the chattering onset.  The onset is where
+    # the unregularized control first saturates; take a window a little
+    # past it so the inset shows steady bang-bang switching, and make it
+    # narrow enough (~25 steps) that individual flips are visible.
+    u_un = tr_un.u[:, 0]
+    sat = np.where(np.abs(u_un) > 0.5)[0]
+    onset = int(sat[0]) if sat.size else len(u_un) // 3
+    z0 = min(onset + 40, len(u_un) - 30)
+    z1 = min(z0 + 25, len(u_un))
+    tz = tr_un.t[z0:z1]
+
+    axins = ax[0].inset_axes([0.62, 0.10, 0.34, 0.62])
+    axins.plot(tz, u_un[z0:z1], color=_C_UNREG, lw=0.8,
+               marker="o", ms=2.5, mfc=_C_UNREG, mec=_C_UNREG)
+    axins.plot(tr_re.t[z0:z1], tr_re.u[z0:z1, 0], color=_C_REG,
+               lw=1.4, ls="--")
+    axins.axhline(0, color=_C_AUX, lw=0.4)
+    axins.set_ylim(-1.25, 1.25)
+    axins.set_xticklabels([])
+    axins.set_yticks([-1, 0, 1])
+    axins.tick_params(labelsize=6, length=2)
+    axins.set_title("zoom", fontsize=7, pad=2)
+    for spine in axins.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(0.5)
+    # box the source region on the main axes and connect it to the inset
+    ax[0].indicate_inset_zoom(axins, edgecolor=_C_AUX, lw=0.5, alpha=0.6)
 
     # panel 2: conditional infidelity xi(t) with the funnel
     ax[1].plot(tr_un.t, tr_un.eps, color=_C_AUX, lw=0.8, ls="--",
@@ -121,7 +163,7 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
                label=r"$\xi(t)$, unregularized")
     ax[1].plot(tr_re.t, tr_re.xi, color=_C_REG, lw=1.4, ls="--",
                label=r"$\xi(t)$, regularized")
-    ax[1].set_ylabel(r"conditional infidelity  $\xi(t)$")
+    ax[1].set_ylabel(r"infidelity  $\xi(t)$")
     ax[1].legend(loc="upper right", frameon=False, fontsize=8)
 
     # panel 3: coherent gain magnitude |beta^H_xi(t)|
@@ -129,14 +171,12 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
                label="unregularized")
     ax[2].plot(tr_re.t, np.abs(tr_re.betaH[:, 0]), color=_C_REG, lw=0.8,
                label="regularized")
-    ax[2].set_ylabel(r"coherent gain  $|\beta^H_\xi(t)|$")
+    ax[2].set_ylabel(r"coherent gain  $|\beta^H_\xi|$")
     ax[2].set_xlabel(_T_LABEL)
     ax[2].legend(loc="upper right", frameon=False, fontsize=8)
 
     fig.align_ylabels(ax)
-    fig.suptitle("E2  Bell-state stabilization from "
-                 r"$\rho_0=|00\rangle\langle00|$ (shared noise path)",
-                 fontsize=9)
+    # figure title carried by the LaTeX caption
     path = os.path.join(outdir, "fig_bell_chatter.pdf")
     fig.savefig(path)
     plt.close(fig)
@@ -235,18 +275,18 @@ def fig_chatter_robustness(outdir: str, seed: int = 7,
         tb = run_trajectory(sb, cb, rb, seed=seed)
         ff_b.append(np.mean(np.diff(np.sign(tb.u[:, 0])) != 0))
 
-    fig, ax = plt.subplots(figsize=(5.0, 3.4))
-    ax.semilogx(dts, ff_q, "o-", color=_C_BLUE, label="qubit")
-    ax.semilogx(dts, ff_b, "s-", color=_C_UNREG, label=r"Bell, $|00\rangle$")
+    dts_ns = np.asarray(dts) * 1e3   # Gamma_m = 1 MHz  =>  Gamma_m^{-1} = 1 us, so dt in ns
+    fig, ax = plt.subplots(figsize=(5.0, 2.7))
+    ax.semilogx(dts_ns, ff_q, "o-", color=_C_BLUE, label="qubit")
+    ax.semilogx(dts_ns, ff_b, "s-", color=_C_UNREG, label=r"Bell, $|00\rangle$")
     ax.set_xlabel(_DT_LABEL)
     ax.set_ylabel("control sign-flip fraction")
     ax.set_ylim(0, 1)
     ax.invert_xaxis()       # Delta t -> 0 to the right
     ax.legend(frameon=False)
-    ax.set_title("Unregularized chattering persists as "
-                 r"$\Delta t \to 0$", fontsize=9)
+    # title carried by the LaTeX caption
     ax.annotate("a discretization artifact\nwould vanish here",
-                xy=(dts[-1], 0.2), xytext=(dts[1], 0.35),
+                xy=(dts_ns[-1], 0.2), xytext=(dts_ns[1], 0.35),
                 fontsize=7.5, color=_C_AUX,
                 arrowprops=dict(arrowstyle="->", color=_C_AUX, lw=0.6))
     path = os.path.join(outdir, "fig_chatter_robustness.pdf")
@@ -361,51 +401,59 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
 # --------------------------------------------------------------------------
 # Figure 1 -- breach-rate step refinement (Section V-E4)
 # --------------------------------------------------------------------------
-def fig_breach_refinement(outdir: str, dts, breach_rates,
-                          ci_los, ci_his) -> str:
-    """Funnel-breach rate of the admissible-funnel qubit ensemble vs Delta t.
-
-    For an admissible funnel the continuum-limit breach probability is zero
-    (Theorem III.1).  At finite Delta t the Milstein truncation and the
-    positivity projection inject an O(Delta t) drift slack (Corollary III.2)
-    that carries a few sample paths across the boundary; halving Delta t
-    halves that slack.  The breach rate therefore falls along an O(Delta t)
-    reference and vanishes in the continuum limit -- the signature that the
-    finite-step excursions of the E1 study are integration slack, not funnel
-    infeasibility.
-
-    All arrays are indexed over ``dts`` and produced by
-    ``run_breach_refinement.py``.
+def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
+                          alias_dt=2.0e-4):
+    """Shell-exit rate vs Delta t for the qubit ensemble.
+ 
+    shell_rates / ci_los / ci_his are the SHELL-exit (s < s_b) rate and its
+    95% Clopper-Pearson interval, indexed over ``dts``.  Points with
+    dt > alias_dt are drawn hollow: at Omega = 20 the closed loop aliases
+    there (STATUS.md) and those points do not belong to the continuum trend.
     """
-    _style()
+    # local style (kept self-contained; matches _style() palette)
+    _C_REG = "#1a9988"; _C_AUX = "#7f7f7f"
+    plt.rcParams.update({"font.family": "serif", "font.size": 9,
+                         "axes.grid": True, "grid.color": "#d9d9d9",
+                         "grid.linewidth": 0.5, "savefig.bbox": "tight",
+                         "figure.dpi": 150})
+ 
     dts = np.asarray(dts, float)
-    rates = np.asarray(breach_rates, float)
+    rates = np.asarray(shell_rates, float)
     lo = np.asarray(ci_los, float)
     hi = np.asarray(ci_his, float)
-
-    # O(Delta t) reference anchored at the coarsest step
-    i0 = int(np.argmax(dts))
-    ref = rates[i0] * dts / dts[i0]
-
+ 
+    # O(dt) reference anchored at the FINEST un-aliased point, extended up
+    smooth = dts <= alias_dt
+    anchor = int(np.argmin(dts))           # finest dt
+    ref = rates[anchor] * dts / dts[anchor]
+ 
     fig, ax = plt.subplots(figsize=(5.0, 3.4))
     ax.plot(dts, ref, color=_C_AUX, lw=0.9, ls="--",
-            label=r"$\mathcal{O}(\Delta t)$ reference")
-    ax.errorbar(dts, rates, yerr=[rates - lo, hi - rates],
+            label=r"$\mathcal{O}(\Delta t)$: what an artifact would follow")
+ 
+    # solid markers for smooth points, hollow for aliased ones
+    ax.errorbar(dts[smooth], rates[smooth],
+                yerr=[rates[smooth] - lo[smooth], hi[smooth] - rates[smooth]],
                 fmt="o-", color=_C_REG, lw=1.0, capsize=3,
-                label="breach rate (95% CI)")
+                label="shell-exit rate (95% CI)")
+    if (~smooth).any():
+        ax.errorbar(dts[~smooth], rates[~smooth],
+                    yerr=[rates[~smooth] - lo[~smooth], hi[~smooth] - rates[~smooth]],
+                    fmt="o", mfc="white", color=_C_REG, lw=1.0, capsize=3,
+                    label=r"aliased ($\Omega\Delta t$ too large)")
+ 
     ax.set_xscale("log")
-    ax.invert_xaxis()                          # Delta t -> 0 to the right
+    ax.invert_xaxis()
     ax.set_xlabel(r"integration step  $\Delta t$")
-    ax.set_ylabel("funnel-breach rate")
+    ax.set_ylabel(r"shell-exit rate  $\mathbb{P}[\tau_\Omega \leq T]$")
     ax.set_ylim(bottom=0.0)
     ax.legend(frameon=False, fontsize=8)
-    ax.set_title(r"Breach rate vanishes as $\Delta t \to 0$  "
-                 "(excursions are integration slack)", fontsize=9)
+    ax.set_title(r"Both exit rates are $\Delta t$-stable "
+                 r"(finite-$w_\delta$ floor, not integration slack)", fontsize=9)
     path = os.path.join(outdir, "fig_breach_refinement.pdf")
     fig.savefig(path)
     plt.close(fig)
     return path
-
 
 # --------------------------------------------------------------------------
 # Section V-E8 -- robustness to dissipative-rate uncertainty

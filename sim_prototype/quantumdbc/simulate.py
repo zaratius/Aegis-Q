@@ -20,6 +20,7 @@ from .barrier import LogBarrier, ExpFunnel
 from .coefficients import coefficients_generic, infidelity, to_bloch, from_bloch
 from .controller import QPData, solve_closed_form, solve_multichannel
 from .integrator import milstein_step, project_physical
+from . import kernel as _kernel
 
 
 @dataclass
@@ -70,9 +71,115 @@ def _weights(cfg: SimConfig, betaH: np.ndarray):
     return wu, wr
 
 
+_CASE_SINGLE = {-1: "V", 1: "I", 2: "II", 3: "III", 4: "IV"}
+
+
+def _extract_system_arrays(sys: System) -> dict:
+    """Stack a System's operator data into contiguous complex128 arrays and
+    precompute the daggers / J^dag J products the kernel consumes."""
+    cc = np.ascontiguousarray
+    N = sys.N
+    Lc = cc(np.stack(sys.Lc).astype(np.complex128))
+    return {
+        "N": N, "NG": N * N - 1, "m": sys.m, "p": sys.p, "eta": float(sys.eta),
+        "G": cc(np.stack(sys.gens).astype(np.complex128)),
+        "I_over_N": cc((np.eye(N) / N).astype(np.complex128)),
+        "Pi": cc(sys.Pi.astype(np.complex128)),
+        "H0": cc(sys.H0.astype(np.complex128)),
+        "L": cc(sys.L.astype(np.complex128)),
+        "Ld": cc(sys.L.conj().T.astype(np.complex128)),
+        "LdL": cc((sys.L.conj().T @ sys.L).astype(np.complex128)),
+        "Hc": cc(np.stack(sys.Hc).astype(np.complex128)),
+        "Lc": Lc,
+        "Lcd": cc(np.stack([lc.conj().T for lc in sys.Lc]).astype(np.complex128)),
+        "LcdLc": cc(np.stack([lc.conj().T @ lc for lc in sys.Lc]).astype(np.complex128)),
+    }
+
+
 def run_trajectory(sys: System, cfg: SimConfig, rho0: np.ndarray,
                    seed: int = 0, store: bool = True,
-                   design_sys: System | None = None) -> Trajectory:
+                   design_sys: System | None = None,
+                   backend: str = "numba",
+                   t_stop: float | None = None) -> Trajectory:
+    """Integrate one closed-loop sample path (Algorithm 1).
+
+    Identical interface and result to the reference implementation; by default
+    it runs the compiled Numba kernel (``quantumdbc.kernel``), which reproduces
+    the reference trajectory to ~machine precision under a given ``seed``.  Pass
+    ``backend="python"`` to force the pure-Python reference path (used for
+    cross-validation, and the automatic fallback when Numba is unavailable).
+    ``t_stop`` caps the integration at ``round(t_stop/dt)`` steps while keeping
+    the full funnel geometry (rate set by ``funnel.T``) -- an early stop for
+    exit-rate sweeps where all exits occur well before the horizon.
+    See ``_run_trajectory_python`` for the full parameter documentation.
+    """
+    if backend != "numba" or not _kernel.HAVE_NUMBA:
+        return _run_trajectory_python(sys, cfg, rho0, seed=seed, store=store,
+                                      design_sys=design_sys, t_stop=t_stop)
+
+    ctrl = sys if design_sys is None else design_sys
+    if ctrl is not sys and (ctrl.N, ctrl.m, ctrl.p) != (sys.N, sys.m, sys.p):
+        raise ValueError("design_sys must match the plant dimension "
+                         "and channel counts")
+
+    P = _extract_system_arrays(sys)
+    C = P if ctrl is sys else _extract_system_arrays(ctrl)
+    f = cfg.funnel
+    N, NG, m, p = P["N"], P["NG"], P["m"], P["p"]
+    n_steps = int(round((f.T if t_stop is None else t_stop) / cfg.dt))
+    single = 1 if (m == 1 and p == 1) else 0
+
+    params = np.array([
+        cfg.dt, P["eta"], C["eta"], f.eps0, f.eps_T, f.r, f.eps0, cfg.s_b,
+        cfg.lam, cfg.c, cfg.eps_f, cfg.wr, cfg.umax, cfg.gmax,
+        1e-12, 1e-6, cfg.wgamma, cfg.wdelta], np.float64)
+    ints = np.array([n_steps, N, NG, m, p, single,
+                     1 if cfg.project else 0, 1 if cfg.regularized else 0],
+                    np.int64)
+
+    x0 = to_bloch(sys, rho0).astype(np.float64)
+    dW = np.random.default_rng(seed).normal(0.0, np.sqrt(cfg.dt), size=n_steps)
+
+    xi_o = np.empty(n_steps); eps_o = np.empty(n_steps)
+    epssb_o = np.empty(n_steps); delta_o = np.empty(n_steps)
+    nu_o = np.empty(n_steps); alpha_o = np.empty(n_steps)
+    u_o = np.empty((n_steps, m)); g_o = np.empty((n_steps, p))
+    bH_o = np.empty((n_steps, m)); bD_o = np.empty((n_steps, p))
+    case_o = np.empty(n_steps, np.int64)
+
+    max_neg, confined = _kernel.run_traj_kernel(
+        x0, dW, params, ints,
+        P["G"], P["I_over_N"], P["Pi"], P["H0"], P["L"], P["Ld"], P["LdL"],
+        P["Hc"], P["Lc"], P["Lcd"], P["LcdLc"],
+        C["Pi"], C["H0"], C["L"], C["Ld"], C["LdL"],
+        C["Hc"], C["Lc"], C["Lcd"], C["LcdLc"],
+        xi_o, eps_o, epssb_o, u_o, g_o, delta_o, nu_o, bH_o, bD_o, alpha_o,
+        case_o)
+
+    if not store:
+        return Trajectory(
+            t=np.array([]), xi=np.array([]), eps=np.array([]),
+            eps_sb=np.array([]), u=np.zeros((0, m)), gamma=np.zeros((0, p)),
+            delta=np.array([]), nu=np.array([]),
+            betaH=np.zeros((0, m)), betaD=np.zeros((0, p)), alpha=np.array([]),
+            case=[], max_neg=float(max_neg), confined=bool(confined))
+
+    if single:
+        case = [_CASE_SINGLE[int(c)] for c in case_o]
+    else:
+        case = ["V" if c == -1 else ("I" if c == 0 else f"sat({int(c)})")
+                for c in case_o]
+    return Trajectory(
+        t=np.arange(n_steps) * cfg.dt, xi=xi_o, eps=eps_o, eps_sb=epssb_o,
+        u=u_o, gamma=g_o, delta=delta_o, nu=nu_o, betaH=bH_o, betaD=bD_o,
+        alpha=alpha_o, case=case, max_neg=float(max_neg),
+        confined=bool(confined))
+
+
+def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
+                           seed: int = 0, store: bool = True,
+                           design_sys: System | None = None,
+                           t_stop: float | None = None) -> Trajectory:
     """Integrate one closed-loop sample path.
 
     Parameters
@@ -104,7 +211,7 @@ def run_trajectory(sys: System, cfg: SimConfig, rho0: np.ndarray,
     rng = np.random.default_rng(seed)
     barrier = LogBarrier(s_bar=cfg.funnel.eps0)
     fun = cfg.funnel
-    n_steps = int(round(fun.T / cfg.dt))
+    n_steps = int(round((fun.T if t_stop is None else t_stop) / cfg.dt))
     m, p = sys.m, sys.p
 
     x = to_bloch(sys, rho0)
