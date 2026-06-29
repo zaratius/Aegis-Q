@@ -24,8 +24,16 @@ from __future__ import annotations
 import os
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("pgf")
+_PGF_PREAMBLE = "\n".join([
+    r"\usepackage[utf8]{inputenc}",
+    r"\usepackage[T1]{fontenc}",
+    r"\usepackage{amsmath,amssymb,mathtools}",
+    r"\usepackage{bm}",
+])
+
 import matplotlib.pyplot as plt
+import scienceplots  # noqa: F401  (registers the 'science'/'ieee'/... styles)
 
 from .systems import bell, qubit
 from .barrier import ExpFunnel
@@ -45,43 +53,26 @@ def _style():
     linewidth or linestyle -- colour is never the sole distinguishing
     channel.
     """
+    plt.style.use(["science", "ieee", "grid"])
     plt.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["DejaVu Serif"],
-        "mathtext.fontset": "cm",
-        "font.size": 8,
-        "axes.titlesize": 8,
-        "axes.labelsize": 8,
-        "axes.linewidth": 0.6,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.axisbelow": True,
-        "axes.grid": True,
+        "pgf.texsystem": "pdflatex",
+        "pgf.rcfonts": False,
+        "pgf.preamble": _PGF_PREAMBLE,
+        "text.usetex": False,            # pgf renders through pdflatex itself
         "axes.grid.axis": "y",
-        "grid.color": "#E9E9E9",
-        "grid.linewidth": 0.5,
-        "lines.linewidth": 1.0,
-        "legend.fontsize": 7,
+        "grid.color": "#E9E9E9", "grid.linewidth": 0.4, "grid.alpha": 0.6,
         "legend.frameon": False,
-        "legend.handlelength": 1.6,
-        "xtick.labelsize": 7,
-        "ytick.labelsize": 7,
-        "xtick.direction": "out",
-        "ytick.direction": "out",
-        "xtick.major.size": 2.5,
-        "ytick.major.size": 2.5,
-        "xtick.major.width": 0.6,
-        "ytick.major.width": 0.6,
-        "figure.dpi": 150,
-        "savefig.bbox": "tight",
-        "savefig.pad_inches": 0.02,
+        "font.size": 8, "axes.titlesize": 8, "axes.labelsize": 8,
+        "xtick.labelsize": 7, "ytick.labelsize": 7, "legend.fontsize": 7,
+        "savefig.dpi": 600, "figure.dpi": 150,
+        "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
     })
 
 
 # manuscript palette -- sampled from the Section V figures
-_C_UNREG = "#d4691e"      # unregularized / first series -- burnt orange
-_C_REG = "#1a9988"        # regularized   / second series -- teal
-_C_BLUE = "#1f6aa5"       # tertiary series -- blue (E1/E3 ensembles)
+_C_UNREG = "#BF0606"      # unregularized / first series -- red
+_C_REG = "#000000"        # regularized   / second series -- teal
+_C_BLUE = "#00629b"       # tertiary series -- blue (E1/E3 ensembles)
 _C_AUX = "#8A8A8A"        # auxiliary lines (funnel, references) -- grey
 
 # rate-axis label: time is in units of the measurement rate Gamma_m = 1
@@ -221,7 +212,6 @@ def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
     ax[0].set_ylabel(r"infidelity  $\xi$")
     ax[0].set_ylim(0, None)
     ax[0].legend(loc="upper right", frameon=False, fontsize=8)
-    ax[0].set_title("E1  qubit ground-state confinement", fontsize=9)
 
     # panel 2: pointwise confinement frequency
     t = trajs[0].t
@@ -374,8 +364,6 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
     ax[0].axhline(0.0, color=_C_AUX, lw=0.4)
     ax[0].set_ylabel("contraction rate")
     ax[0].legend(loc="upper right", frameon=False, fontsize=8)
-    ax[0].set_title(r"E3  funnel feasibility on the boundary shell "
-                    fr"$\xi > {shell}\,\epsilon$", fontsize=9)
 
     # panel 2: worst-case feasibility margin
     slack = V_min - demand
@@ -435,7 +423,7 @@ def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
     ax.errorbar(dts[smooth], rates[smooth],
                 yerr=[rates[smooth] - lo[smooth], hi[smooth] - rates[smooth]],
                 fmt="o-", color=_C_REG, lw=1.0, capsize=3,
-                label="shell-exit rate (95% CI)")
+                label=r"shell-exit rate (95\% CI)")
     if (~smooth).any():
         ax.errorbar(dts[~smooth], rates[~smooth],
                     yerr=[rates[~smooth] - lo[~smooth], hi[~smooth] - rates[~smooth]],
@@ -448,8 +436,6 @@ def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
     ax.set_ylabel(r"shell-exit rate  $\mathbb{P}[\tau_\Omega \leq T]$")
     ax.set_ylim(bottom=0.0)
     ax.legend(frameon=False, fontsize=8)
-    ax.set_title(r"Both exit rates are $\Delta t$-stable "
-                 r"(finite-$w_\delta$ floor, not integration slack)", fontsize=9)
     path = os.path.join(outdir, "fig_breach_refinement.pdf")
     fig.savefig(path)
     plt.close(fig)
@@ -510,7 +496,6 @@ def fig_robustness(outdir: str, plant_kappas, freq_rob, ci_rob,
     ax[0].set_ylabel("confinement\nfrequency")
     ax[0].set_ylim(0.0, 1.18)
     ax[0].legend(frameon=False, fontsize=7.5, loc="lower left", ncol=2)
-    ax[0].set_title("Robustness to dissipative-rate uncertainty", fontsize=9)
 
     # ---- panel B: excursion severity on the worst-case plant -----------
     top = max(exc_rob.max(), exc_opt.max(), 1.05) * 1.10

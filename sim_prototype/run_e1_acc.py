@@ -105,8 +105,10 @@ def main():
 
     outdir = os.path.join(os.path.dirname(__file__), "..", "figures")
     os.makedirs(outdir, exist_ok=True)
+    n_conf = M - n_funnel                  # funnel-confined: never crossed eps
+    lc, hc = clopper_pearson(n_conf, M)
     p = fig_qubit_confinement(outdir, trajs, funnel.eps(trajs[0].t),
-                              trajs[0].t, ci=(n_shell / M, ls, hs))
+                              trajs[0].t, ci=(n_conf / M, lc, hc))
     print(f"  wrote {p}")
 
 

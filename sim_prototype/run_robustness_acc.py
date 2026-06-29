@@ -24,6 +24,11 @@ the SAME seed 5000+k, so the two controllers are compared on identical
 Wiener paths.  Seeds depend only on k, never on the design, so this holds
 across designs; results are bit-identical to the serial run.
 
+The Section V figure (empirical CDF of the per-path peak margin ratio on the
+worst-case plant) is rendered HERE, from the real exc_worst arrays -- no
+reconstruction.  The arrays are also dumped to robustness_excursions.npz so
+the figure can be regenerated without re-running the 6*M-trajectory sweep.
+
     python scripts/run_robustness_acc.py [M]          # M defaults to 40
 """
 
@@ -50,7 +55,8 @@ from quantumdbc.study_config import (
     QUBIT_FUNNEL, QUBIT_SB, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
 )
 from quantumdbc.exit_metrics import exit_metrics
-from quantumdbc.figures import fig_robustness
+# NOTE: no figures.py import -- this script renders its own figure (below),
+# so the worker processes never import matplotlib.
 
 # dt for the robustness ensembles.  Note: at Omega=20 the loop is fully
 # smooth only at dt <= 1e-4 (STATUS.md); 5e-4 matches the original study and
@@ -82,6 +88,59 @@ def _robust_single(task, cfg, rho0, seed0):
     m = exit_metrics(tr, cfg.s_b)
     return (plant_kappa, design_label, bool(not m["funnel_exit"]),
             float(m["runmax"]))
+
+
+def _plot_robustness_cdf(outdir, exc_rob, exc_opt):
+    """Fig 8 -- empirical CDF of the per-path peak margin ratio max_t xi/eps
+    on the worst-case plant (kappa_min).  Plots the REAL ensembles passed in;
+    the boundary at ratio 1 is a gate and the breach region (>1) is shaded so
+    the optimistic tail past it is unmissable.  Matches the SciencePlots look
+    of the figsrc set, rendered through pgf+pdflatex (no dvipng needed)."""
+    import matplotlib
+    matplotlib.use("pgf")
+    import matplotlib.pyplot as plt
+    import scienceplots  # noqa: F401  (registers the styles)
+    plt.style.use(["science", "ieee", "grid"])
+    plt.rcParams.update({
+        "pgf.texsystem": "pdflatex", "pgf.rcfonts": False,
+        "pgf.preamble": r"\usepackage{amsmath}\usepackage{amssymb}\usepackage{bm}",
+        "text.usetex": False, "savefig.dpi": 600, "figure.dpi": 150,
+        "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
+        "font.size": 7, "axes.labelsize": 7, "legend.fontsize": 6,
+        "xtick.labelsize": 6, "ytick.labelsize": 6, "axes.grid.axis": "y",
+        "grid.color": "#E9E9E9", "grid.linewidth": 0.4, "grid.alpha": 0.6,
+        "legend.frameon": False,
+    })
+
+    er = np.sort(np.asarray(exc_rob, float))
+    eo = np.sort(np.asarray(exc_opt, float))
+    yr = np.arange(1, len(er) + 1) / len(er)
+    yo = np.arange(1, len(eo) + 1) / len(eo)
+    wr, wo = float(er[-1]), float(eo[-1])         # worst per-path ratios (real)
+    xmax = max(3.7, wo * 1.05)
+
+    fig, ax = plt.subplots(figsize=(3.40, 1.62), constrained_layout=True)
+    ax.axvspan(1.0, xmax, color="#000000", alpha=0.06, lw=0)
+    ax.step(er, yr, where="post", color="#000000", lw=0.5,
+            label=r"robust ($\kappa_{\min}{=}3$)")
+    ax.step(eo, yo, where="post", color="#000000", lw=0.5, ls="--",
+            label=r"optimistic ($\kappa_{\max}{=}8$)")
+    ax.axvline(1.0, color="k", lw=0.5, ls="--")
+    ax.text(1.03, 0.16, "funnel\nboundary", fontsize=5.6, color="0.35",
+            va="center")
+    ax.plot(wr, 1.0, "v", color="#000000", ms=2.5, clip_on=False)
+    ax.plot(wo, 1.0, "v", color="#000000", ms=2.5, clip_on=False)
+    ax.annotate(f"{wr:.2f}", (wr, 1.0), (wr, 0.85), fontsize=6,
+                color="#000000", ha="center")
+    ax.annotate(f"{wo:.2f}", (wo, 1.0), (wo, 0.85), fontsize=6,
+                color="#000000", ha="center")
+    ax.set_xlim(0.5, xmax); ax.set_ylim(0, 1.02)
+    ax.set_xlabel(r"per-path peak margin ratio $\max_t \xi/\epsilon$")
+    ax.set_ylabel("empirical CDF")
+    ax.legend(loc="center right", handlelength=1.5)
+    p = os.path.join(outdir, "fig_robustness.pdf")
+    fig.savefig(p); plt.close(fig)
+    return p
 
 
 def main():
@@ -148,9 +207,12 @@ def main():
 
     outdir = os.path.join(os.path.dirname(__file__), "..", "figures")
     os.makedirs(outdir, exist_ok=True)
-    p = fig_robustness(outdir, plant_kappas, freq_rob, ci_rob,
-                       freq_opt, ci_opt,
-                       exc_worst["rob"], exc_worst["opt"], kappa_min)
+    # record the REAL per-path ratios behind the figure, so it can be
+    # re-plotted without re-running the 6*M-trajectory sweep.
+    np.savez(os.path.join(outdir, "robustness_excursions.npz"),
+             exc_rob=exc_worst["rob"], exc_opt=exc_worst["opt"],
+             kappa_worst=kappa_min)
+    p = _plot_robustness_cdf(outdir, exc_worst["rob"], exc_worst["opt"])
     print(f"  wrote {p}")
 
 

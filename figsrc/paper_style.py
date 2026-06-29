@@ -1,90 +1,76 @@
 """
-One visual language for the QDBC figure set (IEEE TAC).
+Shared figure style for the QDBC set (IEEE TAC) -- now built on SciencePlots.
 
-Semantic vocabulary, reused by every figure:
-    funnel boundary eps(t)       black, solid        -- the specification
-    shell / buffer / shell-exit  blue,  dashed       -- design-margin layer
-    funnel-exit / breach         vermillion, solid   -- the safety event
-    confined / nominal           grey,  dotted       -- uneventful paths
-    speed limit / feasible / reg green, solid        -- feasibility / regularized
+We apply SciencePlots' ['science', 'ieee', 'grid'] and render it through the
+pgf backend with pdflatex, so the text is true Computer Modern (matching the
+IEEEtran body) and NO external dvipng/ghostscript is required -- only a working
+pdflatex (the same dependency the project already had).  The semantic colour
+palette and the compact per-figure sizes are layered on top.
 
-Okabe-Ito (colour-blind safe); every series also carries a line style/marker so
-panels survive grayscale. Computer Modern via the pgf backend (matches the
-IEEEtran body); two spines, hairline y-grid, direct labels. Sizing is tight for
-the two-column page budget. If the paper moves to an ieeecolor/Times style,
-switch the two font lines in _PGF_PREAMBLE to newtxtext/newtxmath.
+Requires:  pip install SciencePlots      (import name: scienceplots)
+
+Semantic palette (used identically everywhere; colour + linestyle, so panels
+survive grayscale):
+    funnel boundary eps(t)        black, solid       C_FUNNEL
+    shell / buffer / shell-exit   blue,  dashed      C_SHELL  / LS_SHELL
+    funnel-exit / breach / unreg  vermillion, solid  C_BREACH
+    confined / nominal            grey,  dotted      C_CONFINED / LS_CONF
+    speed limit / feasible / reg  green, solid       C_FEASIBLE
+
+If you have a full LaTeX toolchain with dvipng + ghostscript and prefer the
+canonical SciencePlots usetex pipeline, drop the pgf lines in apply() and use
+plt.style.use(['science','ieee','grid']) directly (text.usetex stays True).
+To go LaTeX-free entirely, use ['science','ieee','grid','no-latex'] and change
+the one '\\%' label in fig_qubit.py back to '%'.
 """
 import matplotlib
 matplotlib.use("pgf")
 
-_PGF_PREAMBLE = "\n".join([
-    r"\usepackage[utf8]{inputenc}",
-    r"\usepackage[T1]{fontenc}",
-    r"\usepackage{amsmath,amssymb,mathtools}",
-    r"\usepackage{bm}",
-])
-
 import matplotlib.pyplot as plt  # noqa: E402
+import scienceplots  # noqa: E402,F401  (registers the 'science'/'ieee'/... styles)
 
 # ---- canvas widths (inches) ------------------------------------------------
 COL = 3.40      # one IEEE column
 FULL = 7.06     # two-column span (figure*)
 
 # ---- semantic palette (Okabe-Ito) -----------------------------------------
-OI = dict(black="#000000", orange="#E69F00", skyblue="#56B4E9",
-          green="#009E73", yellow="#F0E442", blue="#0072B2",
-          vermillion="#D55E00", purple="#CC79A7", grey="#999999")
+OI = dict(black="#000000", orange="#ea801c", skyblue="#56B4E9",
+          green="#198450", yellow="#FFEE00", blue="#00629b",
+          vermillion="#FF7300", purple="#C300FF", grey="#999999", red="#FF0000")
 
-C_FUNNEL   = "#000000"          # funnel boundary eps(t)              (solid)
-C_SHELL    = OI["blue"]         # shell / buffer / shell-exit         (dashed)
-C_BREACH   = OI["vermillion"]   # funnel-exit / breach / unregularized(solid)
-C_CONFINED = OI["grey"]         # confined / nominal                  (dotted)
-C_FEASIBLE = OI["green"]        # speed limit / feasible / regularized(solid)
+C_FUNNEL   = "#000000"          # funnel boundary eps(t)               (solid)
+C_SHELL    = OI["blue"]         # shell / buffer / shell-exit          (dashed)
+C_BREACH   = OI["orange"]   # funnel-exit / breach / unregularized (solid)
+C_CONFINED = OI["grey"]         # confined / nominal                   (dotted)
+C_FEASIBLE = OI["green"]        # speed limit / feasible / regularized (solid)
 GRID = "#E9E9E9"
 
 LS_FUNNEL, LS_SHELL, LS_CONF = "-", (0, (4, 2)), (0, (1, 1.6))
 
-# back-compat aliases for any untouched scripts
+# back-compat aliases
 TEAL, ORANGE, RED, BLUE, GREY = C_FEASIBLE, C_BREACH, C_BREACH, C_SHELL, C_CONFINED
 C_UNREG, C_REG, C_REF, C_FUN = C_BREACH, C_FEASIBLE, C_CONFINED, C_FUNNEL
 
 
 def apply():
+    """SciencePlots (science + ieee + grid), rendered via pgf+pdflatex."""
+    plt.style.use(["science", "ieee", "grid"])
     plt.rcParams.update({
+        # --- render through pgf so text is CM via pdflatex (no dvipng/gs) ---
         "pgf.texsystem": "pdflatex",
         "pgf.rcfonts": False,
-        "pgf.preamble": _PGF_PREAMBLE,
-        "font.family": "serif",
-        "font.size": 7,
-        "axes.titlesize": 7,
-        "axes.labelsize": 7,
-        "axes.linewidth": 0.5,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.axisbelow": True,
-        "axes.grid": True,
+        "pgf.preamble": r"\usepackage{amsmath}\usepackage{amssymb}\usepackage{bm}",
+        "text.usetex": False,            # pgf shells out to pdflatex itself
+        # --- vector output, tight bbox ---
+        "savefig.dpi": 600, "figure.dpi": 150,
+        "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
+        # --- compact sizes for the page budget (SciencePlots ieee is ~8pt) ---
+        "font.size": 7, "axes.labelsize": 7, "axes.titlesize": 7,
+        "xtick.labelsize": 6, "ytick.labelsize": 6, "legend.fontsize": 6,
+        # --- keep the grid a hairline and horizontal-only (cleaner for bars) ---
         "axes.grid.axis": "y",
-        "grid.color": GRID,
-        "grid.linewidth": 0.4,
-        "lines.linewidth": 1.0,
-        "legend.fontsize": 6,
+        "grid.color": GRID, "grid.linewidth": 0.4, "grid.alpha": 0.6,
         "legend.frameon": False,
-        "legend.handlelength": 1.5,
-        "legend.borderaxespad": 0.3,
-        "legend.labelspacing": 0.25,
-        "legend.columnspacing": 1.0,
-        "xtick.labelsize": 6,
-        "ytick.labelsize": 6,
-        "xtick.direction": "out",
-        "ytick.direction": "out",
-        "xtick.major.size": 2.0,
-        "ytick.major.size": 2.0,
-        "xtick.major.width": 0.5,
-        "ytick.major.width": 0.5,
-        "figure.dpi": 150,
-        "savefig.dpi": 600,
-        "savefig.bbox": "tight",
-        "savefig.pad_inches": 0.015,
     })
 
 

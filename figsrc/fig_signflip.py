@@ -19,8 +19,8 @@ for dt in dts:
     ffb.append(np.mean(np.diff(np.sign(tb.u[:, 0])) != 0))
 dns = np.asarray(dts) * 1e3
 fig, ax = plt.subplots(figsize=(ps.COL, 1.60), constrained_layout=True)
-ax.semilogx(dns, ffq, 'o-', color=ps.C_SHELL, lw=1.0, ms=3.5, label='qubit')
-ax.semilogx(dns, ffb, 's-', color=ps.C_BREACH, lw=1.0, ms=3.5, label=r'Bell $|00\rangle$')
+ax.semilogx(dns, ffq, 'o-', color="#000000", lw=0.5, ms=2.5, label='qubit')
+ax.semilogx(dns, ffb, 's-', color="#000000", lw=0.5, ms=2.5, label=r'Bell $|00\rangle$')
 ax.set_xlabel(r'integration step $\Delta t$ (ns)'); ax.set_ylabel('sign-flip fraction')
 ax.set_ylim(0, 1); ax.invert_xaxis()
 ax.legend(loc='lower left', handlelength=1.3)
