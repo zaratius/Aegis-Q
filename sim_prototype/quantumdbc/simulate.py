@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .systems import System
-from .barrier import LogBarrier, ExpFunnel
+from .barrier import FunnelGaugeBarrier, ExpFunnel
 from .coefficients import coefficients_generic, infidelity, to_bloch, from_bloch
 from .controller import QPData, solve_closed_form, solve_multichannel
 from .integrator import milstein_step, project_physical
@@ -28,7 +28,7 @@ class SimConfig:
     """Closed-loop configuration."""
     funnel: ExpFunnel
     lam: float = 1.0                 # exponential barrier-decay rate
-    s_b: float = 0.05                # buffer
+    theta_b: float = 0.10            # relative buffer: s_b(t) = theta_b * eps(t)
     c: float = 1.0                   # state-weight scale
     eps_f: float = 1e-2              # state-weight floor
     wr: float = 5.0                  # temporal weight
@@ -130,7 +130,7 @@ def run_trajectory(sys: System, cfg: SimConfig, rho0: np.ndarray,
     single = 1 if (m == 1 and p == 1) else 0
 
     params = np.array([
-        cfg.dt, P["eta"], C["eta"], f.eps0, f.eps_T, f.r, f.eps0, cfg.s_b,
+        cfg.dt, P["eta"], C["eta"], f.eps0, f.eps_T, f.r, cfg.theta_b,
         cfg.lam, cfg.c, cfg.eps_f, cfg.wr, cfg.umax, cfg.gmax,
         1e-12, 1e-6, cfg.wgamma, cfg.wdelta], np.float64)
     ints = np.array([n_steps, N, NG, m, p, single,
@@ -209,7 +209,7 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
                              "and channel counts")
 
     rng = np.random.default_rng(seed)
-    barrier = LogBarrier(s_bar=cfg.funnel.eps0)
+    barrier = FunnelGaugeBarrier()
     fun = cfg.funnel
     n_steps = int(round((fun.T if t_stop is None else t_stop) / cfg.dt))
     m, p = sys.m, sys.p
@@ -239,8 +239,9 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
         eps_t = float(fun.eps(t))
         if xi >= eps_t:
             confined = False
-        s = max(eps_t - xi, cfg.s_b)
-        V = float(barrier.V(s))
+        sb_t = cfg.theta_b * eps_t               # relative buffer width
+        s = max(eps_t - xi, sb_t)
+        V = float(barrier.V(s, eps_t))
         kappa_V = float(barrier.kappa_V(s))
 
         # controller coefficients -- evaluated on the design model, which
@@ -251,7 +252,10 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
         sigma = float(co["sigma"])
         mu = float(co["mu"])
 
-        alpha = mu - float(fun.eps_dot(t)) + 0.5 * kappa_V * sigma ** 2
+        # gauge alpha: the contraction charge carries the factor xi/eps,
+        # vanishing at the target (revised eq. for alpha)
+        alpha = (mu - (xi / eps_t) * float(fun.eps_dot(t))
+                 + 0.5 * kappa_V * sigma ** 2)
 
         wu, wr = _weights(cfg, betaH)
         qp = QPData(alpha=alpha, betaH=betaH, betaD=betaD, V=V, lam=cfg.lam,
@@ -262,7 +266,7 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
 
         if store:
             rec_t.append(t); rec_xi.append(xi)
-            rec_eps.append(eps_t); rec_epssb.append(eps_t - cfg.s_b)
+            rec_eps.append(eps_t); rec_epssb.append(eps_t - sb_t)
             rec_u.append(res.u.copy()); rec_g.append(res.gamma.copy())
             rec_d.append(res.delta); rec_nu.append(res.nu)
             rec_bH.append(betaH.copy()); rec_case.append(res.case)

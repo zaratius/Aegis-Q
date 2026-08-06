@@ -24,7 +24,7 @@ from scipy import stats
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from quantumdbc import qubit, SimConfig, run_trajectory
 from quantumdbc.study_config import (
-    QUBIT_FUNNEL, QUBIT_SB, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
+    QUBIT_FUNNEL, QUBIT_THETA_B, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
 )
 from quantumdbc.exit_metrics import exit_metrics
 
@@ -37,7 +37,7 @@ def clopper_pearson(k, n, alpha=0.05):
 
 def _one(k, sys_, cfg, rho0, seed_base):
     tr = run_trajectory(sys_, cfg, rho0, seed=seed_base + k, store=True)
-    m = exit_metrics(tr, cfg.s_b)
+    m = exit_metrics(tr, cfg.theta_b)
     return (m["shell_exit"], m["funnel_exit"])
 
 
@@ -52,7 +52,7 @@ def main():
     n_workers = min(10, os.cpu_count() or 8)
 
     print(f"w_delta sweep: M={M}, dt={dt:.0e}, "
-          f"funnel eps_T={funnel.eps_T}, s_b={QUBIT_SB}")
+          f"funnel eps_T={funnel.eps_T}, theta_b={QUBIT_THETA_B}")
     print(f"  parallel workers: {n_workers}\n")
 
     weights = dict(QUBIT_WEIGHTS)        # copy so we can override wdelta
@@ -62,7 +62,7 @@ def main():
         for j, wd in enumerate(wdeltas):
             weights["wdelta"] = wd
             cfg = SimConfig(funnel=funnel, dt=dt, lam=QUBIT_LAM,
-                            s_b=QUBIT_SB, **weights)
+                            theta_b=QUBIT_THETA_B, **weights)
             seed_base = 9000 + 1000 * j
             task = partial(_one, sys_=sys_, cfg=cfg, rho0=rho0,
                            seed_base=seed_base)

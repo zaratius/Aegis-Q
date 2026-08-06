@@ -43,7 +43,7 @@ def main():
     funnel = ExpFunnel(eps0=0.62, eps_T=0.20, T=1.0)
     dt, seed = 2.5e-4, 7
 
-    common = dict(funnel=funnel, dt=dt, lam=0.5, s_b=0.05,
+    common = dict(funnel=funnel, dt=dt, lam=0.5, theta_b=0.30,
                   wgamma=1.0, wdelta=1e3)
     cfg_un = SimConfig(regularized=False, **common)
     cfg_re = SimConfig(regularized=True, wr=50.0, c=20.0, **common)

@@ -52,7 +52,7 @@ import numpy as np
 from scipy import stats
 
 from quantumdbc.systems import qubit
-from quantumdbc.barrier import ExpFunnel, LogBarrier
+from quantumdbc.barrier import ExpFunnel
 from quantumdbc.controller import QPData, solve_closed_form
 from quantumdbc.simulate import SimConfig, run_trajectory
 from quantumdbc.exit_metrics import exit_metrics
@@ -87,18 +87,17 @@ _FD = 1e-6  # central-difference step for the Milstein (G.grad)G term
 # Canonical config / system builders                                           #
 # --------------------------------------------------------------------------- #
 def funnel() -> ExpFunnel:
-    # NOTE on eps_T: Table II currently lists qubit eps(T) = 0.12. With the
-    # enlarged buffer s_b = 0.25, eps(t) crosses s_b at t ~ 2.0, after which the
-    # design shell Omega(t) = {xi <= eps - s_b} is EMPTY and the shell-exit
-    # metric is trivially 1 -- the metric is only well-defined while eps(t) > s_b.
-    # eps_T = 0.30 (> s_b) keeps both metrics meaningful over the whole horizon
-    # and matches the rates reported in the text; update Table II to 0.30.
+    # Relative buffer (funnel gauge): the design shell {xi <= (1-theta_b) eps}
+    # never empties, so the old eps_T-vs-buffer conflict is gone. eps_T = 0.30
+    # matches the rates reported in the text and Table II.
     return ExpFunnel(eps0=0.70, eps_T=0.30, T=4.0, tol_frac=0.05)
 
 
-def make_cfg(dt: float = DT_REPORT, wdelta: float = 1e3, **over) -> SimConfig:
-    kw = dict(funnel=funnel(), lam=0.5, s_b=0.25, c=20.0, eps_f=1e-2,
-              wr=50.0, wgamma=1.0, wdelta=wdelta, umax=1.0, gmax=1.0,
+def make_cfg(dt: float = DT_REPORT, wdelta: float = 1e4, **over) -> SimConfig:
+    # wdelta=1e4 and gmax=1.25 follow study_config (edge-defensibility +
+    # certified closed-loop bound; see study_config docstring).
+    kw = dict(funnel=funnel(), lam=0.5, theta_b=0.35, c=20.0, eps_f=1e-2,
+              wr=50.0, wgamma=1.0, wdelta=wdelta, umax=1.0, gmax=1.25,
               dt=dt, regularized=True, project=True)
     kw.update(over)
     return SimConfig(**kw)
@@ -142,7 +141,6 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
     single-channel qubit; see validate().
     """
     rng = np.random.default_rng(seed)
-    barrier = LogBarrier(s_bar=cfg.funnel.eps0)
     fun = cfg.funnel
     n_steps = (int(round(fun.T / cfg.dt)) if t_stop is None
                else int(round(t_stop / cfg.dt)))
@@ -165,12 +163,13 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
             confined = False
             if tau_funnel is None:
                 tau_funnel = t
+        sb_t = cfg.theta_b * eps_t               # relative buffer width
         gap = eps_t - xi
-        if gap < cfg.s_b and tau_shell is None:
+        if gap < sb_t and tau_shell is None:
             tau_shell = t
-        s = gap if gap > cfg.s_b else cfg.s_b
-        V = float(barrier.V(s))
-        kappa_V = 1.0 / s  # = -V''/V' for the log barrier
+        s = gap if gap > sb_t else sb_t
+        V = float(-np.log(s / eps_t))            # funnel-gauge barrier
+        kappa_V = 1.0 / s  # = -V_ss/V_s, gauge-invariant
 
         lind_L = _lindblad(L, Ld, rho)
         lind_Lc = _lindblad(Lc, Lcd, rho)
@@ -181,7 +180,9 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
         betaH = float((1j * np.trace((rho @ Pi - Pi @ rho) @ Hc)).real)
         betaD = float((-np.trace(Pi @ lind_Lc)).real)
         sigma = float((-sqrt_eta * np.trace(Pi @ innov_L)).real)
-        alpha = mu - float(fun.eps_dot(t)) + 0.5 * kappa_V * sigma ** 2
+        # gauge alpha: contraction charge scaled by xi/eps
+        alpha = (mu - (xi / eps_t) * float(fun.eps_dot(t))
+                 + 0.5 * kappa_V * sigma ** 2)
 
         bH, bD = np.array([betaH]), np.array([betaD])
         if cfg.regularized:
@@ -270,7 +271,7 @@ def _eta_worker(args):
     cfg = _cfg_for(knob, value)
     tr = run_trajectory(sys_, cfg, RHO0, seed=int(seed), store=True,
                         t_stop=t_stop)
-    m = exit_metrics(tr, cfg.s_b)
+    m = exit_metrics(tr, cfg.theta_b)
     ts = float(m["tau_Omega"]) if m["shell_exit"] else None
     tf = float(m["tau_aleph"]) if m["funnel_exit"] else None
     return int(seed), (not m["funnel_exit"]), ts, tf
@@ -325,12 +326,12 @@ def sweep(knob, M, seed0=0):
 # --------------------------------------------------------------------------- #
 # Validation                                                                   #
 # --------------------------------------------------------------------------- #
-def validate(seeds=(0, 1, 2, 7), buffers=(0.20, 0.25)):
+def validate(seeds=(0, 1, 2, 7), buffers=(0.25, 0.35)):
     """Confirm run_path reproduces run_trajectory to ~1e-12."""
     print("== validate: run_path vs quantumdbc.run_trajectory ==")
     worst = 0.0
     for sb in buffers:
-        cfg = make_cfg(s_b=sb)
+        cfg = make_cfg(theta_b=sb)
         sys_ = make_system()
         ctx = _ctx(sys_)
         for s in seeds:

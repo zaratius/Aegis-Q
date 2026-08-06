@@ -52,7 +52,7 @@ from scipy import stats
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from quantumdbc import qubit, SimConfig, run_trajectory
 from quantumdbc.study_config import (
-    QUBIT_FUNNEL, QUBIT_SB, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
+    QUBIT_FUNNEL, QUBIT_THETA_B, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
 )
 from quantumdbc.exit_metrics import exit_metrics
 # NOTE: no figures.py import -- this script renders its own figure (below),
@@ -85,7 +85,7 @@ def _robust_single(task, cfg, rho0, seed0):
     design = _qubit_cached(design_kappa)
     tr = run_trajectory(plant, cfg, rho0, seed=seed0 + k,
                         store=True, design_sys=design)
-    m = exit_metrics(tr, cfg.s_b)
+    m = exit_metrics(tr, cfg.theta_b)
     return (plant_kappa, design_label, bool(not m["funnel_exit"]),
             float(m["runmax"]))
 
@@ -151,15 +151,15 @@ def main():
 
     rho0   = np.array(QUBIT_RHO0, dtype=complex)
     funnel = QUBIT_FUNNEL                              # shared geometry
-    cfg = SimConfig(funnel=funnel, dt=ROBUST_DT, lam=QUBIT_LAM, s_b=QUBIT_SB,
-                    **QUBIT_WEIGHTS)
+    cfg = SimConfig(funnel=funnel, dt=ROBUST_DT, lam=QUBIT_LAM,
+                    theta_b=QUBIT_THETA_B, **QUBIT_WEIGHTS)
 
     n_workers = min(10, os.cpu_count() or 8)
 
     print(f"robustness study (accelerated): M = {M}, "
           f"uncertainty kappa in [{kappa_min:g}, {kappa_max:g}]")
     print(f"  funnel eps0={funnel.eps0}, eps_T={funnel.eps_T}, T={funnel.T}; "
-          f"s_b={QUBIT_SB}, dt={ROBUST_DT:.1e}")
+          f"theta_b={QUBIT_THETA_B}, dt={ROBUST_DT:.1e}")
     print(f"  robust controller     -> design model kappa = {kappa_min:g}")
     print(f"  optimistic controller -> design model kappa = {kappa_max:g}")
     print(f"  parallel workers: {n_workers}  "

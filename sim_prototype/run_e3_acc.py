@@ -1,11 +1,11 @@
 """
 E3 -- funnel feasibility check (Section V-E).  Parallelized.
 
-For the qubit closed loop, evaluates the feasibility condition
+For the qubit closed loop, evaluates the funnel-gauge feasibility condition
 
     |eps_dot(t)|  <=  V(t),
-    V(t) = sum |beta^H_i| u_max + sum |beta^D_j| gamma_max
-           - ( mu + (1/2) kappa_V sigma^2 ),
+    V(t) = (eps/xi) [ sum |beta^H_i| u_max + sum |beta^D_j| gamma_max
+                      - mu - (1/2) kappa_V sigma^2 ],
 
 on the funnel boundary shell xi > shell * eps -- the region where the
 barrier is active and the condition is meaningful.  The figure overlays the
@@ -37,8 +37,11 @@ from functools import partial
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from quantumdbc import qubit, ExpFunnel, SimConfig, run_trajectory
+from quantumdbc import qubit, SimConfig, run_trajectory
 from quantumdbc.figures import fig_feasibility, feasibility_data
+from quantumdbc.study_config import (
+    QUBIT_FUNNEL, QUBIT_THETA_B, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
+)
 
 
 # -------------------------------------------------------------------------
@@ -57,15 +60,19 @@ def main():
     n_paths = M
     shell = 0.85
     sys_ = qubit()
-    rho0 = np.array([[0.78, 0.08], [0.08, 0.22]], dtype=complex)
+    rho0 = np.array(QUBIT_RHO0, dtype=complex)
 
-    funnel = ExpFunnel(eps0=0.70, eps_T=0.30, T=4.0)
-    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=0.5, s_b=0.25,
-                    wr=50.0, c=20.0, wgamma=1.0, wdelta=1e3, regularized=True)
+    funnel = QUBIT_FUNNEL                              # shared geometry
+    cfg = SimConfig(funnel=funnel, dt=5e-4, lam=QUBIT_LAM,
+                    theta_b=QUBIT_THETA_B, **QUBIT_WEIGHTS)
 
-    xi0=0.22
-    assert funnel.eps(0) > xi0 + cfg.s_b, "CRITICAL: Problem 1 precondition violated. Funnel too narrow at t=0." 
-    assert cfg.s_b < funnel.eps(funnel.T), "CRITICAL: Buffer thicker than terminal funnel. Shell vanishes!"
+    xi0 = 1.0 - float(QUBIT_RHO0[0, 0].real)
+    # relative buffer: the shell {xi <= (1-theta_b) eps} never empties, so the
+    # old empty-shell guard is gone; only the Problem 1 precondition remains
+    # (already checked as a hard guard in study_config.py; re-asserted here
+    # for a fast, local failure if this script is ever run standalone).
+    assert xi0 < (1.0 - cfg.theta_b) * funnel.eps(0), \
+        "CRITICAL: Problem 1 precondition violated. Funnel too narrow at t=0."
 
     # M4 Max = 14 P-cores; os.cpu_count() also counts the 2 E-cores, which
     # produce a long tail, so cap at the P-core count.

@@ -5,8 +5,9 @@ import numpy as np, matplotlib.pyplot as plt
 import paper_style as ps; ps.apply()
 from quantumdbc.barrier import ExpFunnel
 
-fun = ExpFunnel(eps0=0.62, eps_T=0.13, T=4.0); s_b = 0.08
-t = np.linspace(0, 4, 600); eps = fun.eps(t); shell = eps - s_b
+fun = ExpFunnel(eps0=0.62, eps_T=0.13, T=4.0); theta_b = 0.18
+t = np.linspace(0, 4, 600); eps = fun.eps(t)
+shell = (1 - theta_b) * eps          # relative buffer: shell contracts with the funnel
 
 # illustrative path: decay + smoothed noise + two crafted excursions
 rng = np.random.default_rng(4)
@@ -38,6 +39,6 @@ ax.annotate(r'funnel-exit $\tau_\aleph$', (t[i_fn], xi[i_fn]), (2.55, 0.50),
             fontsize=6, color=ps.C_BREACH,
             arrowprops=dict(arrowstyle='-', color=ps.C_BREACH, lw=0.4))
 ax.set_xlim(0, 4); ax.set_ylim(0, 0.72)
-ax.set_xlabel(r'time $t$ ($\mu$s)'); ax.set_ylabel(r'error $\xi$')
+ax.set_xlabel(r'time $t$ ($\Gamma_m^{-1}$)'); ax.set_ylabel(r'error $\xi$')
 ax.grid(True, axis='both')
 fig.savefig('../figures/fig_funnel.pdf'); print("wrote fig_funnel.pdf")

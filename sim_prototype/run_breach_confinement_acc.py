@@ -14,7 +14,7 @@ REVISED (v3) after reading the package source.  Two corrections vs v2:
 
   2. TWO EVENTS.  tr.confined in simulate.py is set by `xi >= eps_t`, i.e.
      it is the FUNNEL-exit (tau_aleph), the safety-critical event.  We log
-     it AND the shell-exit (tau_Omega, s < s_b) separately via exit_metrics.
+     it AND the shell-exit (tau_Omega, s < theta_b eps) separately via exit_metrics.
      Per the revised Theorem III.1 a persistent tau_aleph rate under
      refinement on a feasible funnel means the supermartingale is FAILING
      (funnel infeasible on the realized shell), NOT "noise bounded by Doob".
@@ -45,7 +45,7 @@ from scipy import stats
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from quantumdbc import qubit, SimConfig, run_trajectory
 from quantumdbc.study_config import (
-    QUBIT_FUNNEL, QUBIT_SB, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
+    QUBIT_FUNNEL, QUBIT_THETA_B, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
 )
 from quantumdbc.exit_metrics import exit_metrics, overshoot_scaling
 from quantumdbc.figures import fig_breach_refinement
@@ -67,7 +67,7 @@ def clopper_pearson(k, n, alpha=0.05):
 # small tuple inside the worker and discarded (peak memory: one path/worker).
 def _breach_single(k, sys_, cfg, rho0, seed_base):
     tr = run_trajectory(sys_, cfg, rho0, seed=seed_base + k, store=True)
-    m = exit_metrics(tr, cfg.s_b)
+    m = exit_metrics(tr, cfg.theta_b)
     # also report the unregularized-aliasing tell: control sign-flip fraction
     if tr.u.size:
         sgnflip = float(np.mean(np.diff(np.sign(tr.u[:, 0])) != 0))
@@ -92,7 +92,7 @@ def main():
 
     print(f"breach-rate step refinement (v3): M = {M}")
     print(f"  funnel eps0={funnel.eps0}, eps_T={funnel.eps_T}, T={funnel.T}; "
-          f"s_b={QUBIT_SB}, lam={QUBIT_LAM}")
+          f"theta_b={QUBIT_THETA_B}, lam={QUBIT_LAM}")
     print(f"  dts = {', '.join(f'{d:.2e}' for d in dts)}  "
           f"(fit excludes dt > {ALIAS_DT:.0e}: Omega=20 aliasing)")
     print(f"  parallel workers: {n_workers}\n")
@@ -102,8 +102,8 @@ def main():
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=n_workers) as pool:
         for j, dt in enumerate(dts):
-            cfg = SimConfig(funnel=funnel, dt=dt, lam=QUBIT_LAM, s_b=QUBIT_SB,
-                            **QUBIT_WEIGHTS)
+            cfg = SimConfig(funnel=funnel, dt=dt, lam=QUBIT_LAM,
+                            theta_b=QUBIT_THETA_B, **QUBIT_WEIGHTS)
             seed_base = 2000 + 1000 * j
             task = partial(_breach_single, sys_=sys_, cfg=cfg, rho0=rho0,
                            seed_base=seed_base)
@@ -170,7 +170,7 @@ def main():
             print("     dominates. FRAMING B (O(dt) artifact).")
         else:
             print("\n  -> Funnel-exit persistent, shell-exit shrinking: unusual.")
-            print("     Check w_delta and the s_b vs eps_T geometry; this is not")
+            print("     Check w_delta and the theta_b geometry; this is not")
             print("     the expected ordering of the two events.")
     else:
         print("\n  too few un-aliased points to fit; add finer dt.")

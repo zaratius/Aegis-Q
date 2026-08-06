@@ -430,18 +430,17 @@ def run_traj_kernel(
     eps0 = params[3]
     eps_T = params[4]
     rfun = params[5]
-    s_bar = params[6]
-    s_b = params[7]
-    lam = params[8]
-    cc = params[9]
-    eps_f = params[10]
-    wr_const = params[11]
-    umax = params[12]
-    gmax = params[13]
-    tol = params[14]
-    eps_mil = params[15]
-    wgamma = params[16]
-    wdelta = params[17]
+    theta_b = params[6]
+    lam = params[7]
+    cc = params[8]
+    eps_f = params[9]
+    wr_const = params[10]
+    umax = params[11]
+    gmax = params[12]
+    tol = params[13]
+    eps_mil = params[14]
+    wgamma = params[15]
+    wdelta = params[16]
 
     n_steps = ints[0]
     N = ints[1]
@@ -501,17 +500,19 @@ def run_traj_kernel(
         eps_dot = -rfun * (eps0 - eps_T) * expn
         if xi >= eps_t:
             confined = 0
+        sb_t = theta_b * eps_t                    # relative buffer width
         s = eps_t - xi
-        if s < s_b:
-            s = s_b
-        V = -np.log(s / s_bar)
+        if s < sb_t:
+            s = sb_t
+        V = -np.log(s / eps_t)                    # funnel-gauge barrier
         kappa_V = 1.0 / s
 
         # controller coefficients on the design operator set, plant rho
         mu, sigma = _coeffs(rho, Pi_c, H0_c, L_c, Ld_c, LdL_c,
                             Hc_c, Lc_c, Lcd_c, LcdLc_c, eta_c,
                             N, m, p, betaH, betaD)
-        alpha = mu - eps_dot + 0.5 * kappa_V * sigma * sigma
+        # gauge alpha: contraction charge scaled by xi/eps
+        alpha = mu - (xi / eps_t) * eps_dot + 0.5 * kappa_V * sigma * sigma
 
         for i in range(m):
             if regularized:
@@ -533,7 +534,7 @@ def run_traj_kernel(
         # record
         xi_o[n] = xi
         eps_o[n] = eps_t
-        epssb_o[n] = eps_t - s_b
+        epssb_o[n] = eps_t - sb_t
         delta_o[n] = delta
         nu_o[n] = nu
         alpha_o[n] = alpha

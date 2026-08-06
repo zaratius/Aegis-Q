@@ -74,11 +74,13 @@ def apply():
     })
 
 
-def funnel_curves(ax, t, eps, s_b, fill=True):
-    """Shared funnel vocabulary: boundary eps(t) (black solid) + shell eps-s_b
-    (blue dashed), with an optional faint buffer fill."""
+def funnel_curves(ax, t, eps, theta_b, fill=True):
+    """Shared funnel vocabulary: boundary eps(t) (black solid) + shell
+    (1-theta_b) eps(t) (blue dashed, relative buffer), with an optional faint
+    buffer fill."""
+    shell = (1.0 - theta_b) * eps
     if fill:
-        ax.fill_between(t, eps - s_b, eps, color=C_SHELL, alpha=0.08, lw=0,
+        ax.fill_between(t, shell, eps, color=C_SHELL, alpha=0.08, lw=0,
                         zorder=1)
     ax.plot(t, eps, color=C_FUNNEL, lw=1.2, ls=LS_FUNNEL, zorder=6)
-    ax.plot(t, eps - s_b, color=C_SHELL, lw=0.9, ls=LS_SHELL, zorder=6)
+    ax.plot(t, shell, color=C_SHELL, lw=0.9, ls=LS_SHELL, zorder=6)

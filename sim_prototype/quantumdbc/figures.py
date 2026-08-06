@@ -76,8 +76,8 @@ _C_BLUE = "#00629b"       # tertiary series -- blue (E1/E3 ensembles)
 _C_AUX = "#8A8A8A"        # auxiliary lines (funnel, references) -- grey
 
 # rate-axis label: time is in units of the measurement rate Gamma_m = 1
-_T_LABEL = r"time  $t$ ($\mu$s)"
-_DT_LABEL = r"integration step  $\Delta t$ (ns)"
+_T_LABEL = r"time  $t$ ($\Gamma_m^{-1}$)"
+_DT_LABEL = r"integration step  $\Delta t$ ($10^{-4}\,\Gamma_m^{-1}$)"
 
 
 # --------------------------------------------------------------------------
@@ -98,7 +98,7 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     rho0 = np.outer(ket00, ket00.conj())
     funnel = ExpFunnel(eps0=0.62, eps_T=0.08, T=T)
 
-    common = dict(funnel=funnel, dt=dt, lam=0.5, s_b=0.05,
+    common = dict(funnel=funnel, dt=dt, lam=0.5, theta_b=0.30,
                   wgamma=1.0, wdelta=1e3)
     cfg_un = SimConfig(regularized=False, **common)
     cfg_re = SimConfig(regularized=True, wr=50.0, c=20.0, **common)
@@ -164,7 +164,9 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
                label="regularized")
     ax[2].set_ylabel(r"coherent gain  $|\beta^H_\xi|$")
     ax[2].set_xlabel(_T_LABEL)
-    ax[2].legend(loc="upper right", frameon=False, fontsize=8)
+    # legend in the clear pre-chattering region (t < 0.85); upper right sits
+    # on the saturated band and is illegible in print
+    ax[2].legend(loc="upper left", frameon=False, fontsize=8)
 
     fig.align_ylabels(ax)
     # figure title carried by the LaTeX caption
@@ -257,18 +259,18 @@ def fig_chatter_robustness(outdir: str, seed: int = 7,
 
     ff_q, ff_b = [], []
     for dt in dts:
-        cq = SimConfig(funnel=fq, dt=dt, lam=0.6, s_b=0.04, regularized=False)
+        cq = SimConfig(funnel=fq, dt=dt, lam=0.6, theta_b=0.10, regularized=False)
         tq = run_trajectory(sq, cq, rq, seed=seed)
         ff_q.append(np.mean(np.diff(np.sign(tq.u[:, 0])) != 0))
 
-        cb = SimConfig(funnel=fb, dt=dt, lam=0.5, s_b=0.05, regularized=False)
+        cb = SimConfig(funnel=fb, dt=dt, lam=0.5, theta_b=0.10, regularized=False)
         tb = run_trajectory(sb, cb, rb, seed=seed)
         ff_b.append(np.mean(np.diff(np.sign(tb.u[:, 0])) != 0))
 
-    dts_ns = np.asarray(dts) * 1e3   # Gamma_m = 1 MHz  =>  Gamma_m^{-1} = 1 us, so dt in ns
+    dts_disp = np.asarray(dts) * 1e4   # display in units of 10^{-4} Gamma_m^{-1}
     fig, ax = plt.subplots(figsize=(5.0, 2.7))
-    ax.semilogx(dts_ns, ff_q, "o-", color=_C_BLUE, label="qubit")
-    ax.semilogx(dts_ns, ff_b, "s-", color=_C_UNREG, label=r"Bell, $|00\rangle$")
+    ax.semilogx(dts_disp, ff_q, "o-", color=_C_BLUE, label="qubit")
+    ax.semilogx(dts_disp, ff_b, "s-", color=_C_UNREG, label=r"Bell, $|00\rangle$")
     ax.set_xlabel(_DT_LABEL)
     ax.set_ylabel("control sign-flip fraction")
     ax.set_ylim(0, 1)
@@ -276,7 +278,7 @@ def fig_chatter_robustness(outdir: str, seed: int = 7,
     ax.legend(frameon=False)
     # title carried by the LaTeX caption
     ax.annotate("a discretization artifact\nwould vanish here",
-                xy=(dts_ns[-1], 0.2), xytext=(dts_ns[1], 0.35),
+                xy=(dts_disp[-1], 0.2), xytext=(dts_disp[1], 0.35),
                 fontsize=7.5, color=_C_AUX,
                 arrowprops=dict(arrowstyle="->", color=_C_AUX, lw=0.6))
     path = os.path.join(outdir, "fig_chatter_robustness.pdf")
@@ -293,22 +295,23 @@ def feasibility_data(trajs: list, funnel, umax: float, gmax: float,
                      shell: float = 0.85):
     """Pointwise feasibility margin, with the boundary-shell restriction.
 
-    The QP avoids slack exactly when the actuators cover the uncontrolled
-    drift,
+    Under the funnel gauge the speed limit at a state rho carries the
+    prefactor eps/xi (revised Proposition III.2):
 
-        sum |beta^H_i| u_max + sum |beta^D_j| gamma_max  >=  alpha + lam V,
+        Phi(rho,t) = (eps/xi) [ sum |beta^H_i| u_max + sum |beta^D_j| g_max
+                                - mu - (1/2) kappa_V sigma^2 ],
 
-    alpha = mu - eps_dot + (1/2) kappa_V sigma^2.  Isolating the funnel
-    contraction demand gives the feasibility condition  |eps_dot| <= V(t),
+    and the funnel is feasible at rho iff |eps_dot| <= Phi.  The stored
+    gauge alpha is  mu - (xi/eps) eps_dot + (1/2) kappa_V sigma^2, so
+    -mu - (1/2) kappa_V sigma^2 = -alpha - (xi/eps) eps_dot, and
 
-        V(t) = sum |beta^H_i| u_max + sum |beta^D_j| gamma_max
-               - ( mu + (1/2) kappa_V sigma^2 ).
+        Phi = (eps/xi) ( sum|bH| u_max + sum|bD| g_max - alpha ) - eps_dot.
 
     The condition is only meaningful where the barrier is active, i.e. where
     the state is in the outer shell of the funnel,  xi > shell * eps.  Deep
     inside the funnel the actuation gains vanish (the state is at the
-    target) and V(t) < 0 there carries no information -- there is no
-    confinement demand to meet.  The figure therefore evaluates V(t) on the
+    target) and Phi < |eps_dot| there carries no information -- there is no
+    confinement demand to meet.  The figure therefore evaluates Phi on the
     boundary shell only.
 
     Returns (t, demand, V_min_shell, V_med_shell, infeasible_mask) where the
@@ -322,8 +325,10 @@ def feasibility_data(trajs: list, funnel, umax: float, gmax: float,
     for i, tr in enumerate(trajs):
         bH = np.abs(tr.betaH).sum(axis=1)
         bD = np.abs(tr.betaD).sum(axis=1)
-        V = bH * umax + bD * gmax - (tr.alpha + eps_dot)
-        in_shell = tr.xi > shell * tr.eps
+        with np.errstate(divide="ignore", invalid="ignore"):
+            pref = tr.eps / tr.xi                # gauge prefactor eps/xi
+            V = pref * (bH * umax + bD * gmax - tr.alpha) - eps_dot
+        in_shell = tr.xi > shell * tr.eps        # pref finite on the shell
         V_shell[i, in_shell] = V[in_shell]
 
     with np.errstate(invalid="ignore"):
@@ -392,18 +397,23 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
 def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
                           alias_dt=2.0e-4):
     """Shell-exit rate vs Delta t for the qubit ensemble.
- 
-    shell_rates / ci_los / ci_his are the SHELL-exit (s < s_b) rate and its
+
+    shell_rates / ci_los / ci_his are the SHELL-exit (s < theta_b eps) rate and its
     95% Clopper-Pearson interval, indexed over ``dts``.  Points with
     dt > alias_dt are drawn hollow: at Omega = 20 the closed loop aliases
     there (STATUS.md) and those points do not belong to the continuum trend.
     """
-    # local style (kept self-contained; matches _style() palette)
+    # local style (kept self-contained; matches _style() palette). The pgf
+    # preamble must be set here as well: this function does not go through
+    # _style(), and without amssymb the \mathbb in the y-label halts the
+    # pdflatex run at savefig time.
     _C_REG = "#1a9988"; _C_AUX = "#7f7f7f"
     plt.rcParams.update({"font.family": "serif", "font.size": 9,
                          "axes.grid": True, "grid.color": "#d9d9d9",
                          "grid.linewidth": 0.5, "savefig.bbox": "tight",
-                         "figure.dpi": 150})
+                         "figure.dpi": 150,
+                         "pgf.texsystem": "pdflatex", "pgf.rcfonts": False,
+                         "pgf.preamble": _PGF_PREAMBLE})
  
     dts = np.asarray(dts, float)
     rates = np.asarray(shell_rates, float)
@@ -415,24 +425,25 @@ def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
     anchor = int(np.argmin(dts))           # finest dt
     ref = rates[anchor] * dts / dts[anchor]
  
+    dts_disp = dts * 1e4                   # display in units of 10^{-4} Gamma_m^{-1}
     fig, ax = plt.subplots(figsize=(5.0, 3.4))
-    ax.plot(dts, ref, color=_C_AUX, lw=0.9, ls="--",
+    ax.plot(dts_disp, ref, color=_C_AUX, lw=0.9, ls="--",
             label=r"$\mathcal{O}(\Delta t)$: what an artifact would follow")
- 
+
     # solid markers for smooth points, hollow for aliased ones
-    ax.errorbar(dts[smooth], rates[smooth],
+    ax.errorbar(dts_disp[smooth], rates[smooth],
                 yerr=[rates[smooth] - lo[smooth], hi[smooth] - rates[smooth]],
                 fmt="o-", color=_C_REG, lw=1.0, capsize=3,
                 label=r"shell-exit rate (95\% CI)")
     if (~smooth).any():
-        ax.errorbar(dts[~smooth], rates[~smooth],
+        ax.errorbar(dts_disp[~smooth], rates[~smooth],
                     yerr=[rates[~smooth] - lo[~smooth], hi[~smooth] - rates[~smooth]],
                     fmt="o", mfc="white", color=_C_REG, lw=1.0, capsize=3,
                     label=r"aliased ($\Omega\Delta t$ too large)")
  
     ax.set_xscale("log")
     ax.invert_xaxis()
-    ax.set_xlabel(r"integration step  $\Delta t$")
+    ax.set_xlabel(r"integration step  $\Delta t$ ($10^{-4}\,\Gamma_m^{-1}$)")
     ax.set_ylabel(r"shell-exit rate  $\mathbb{P}[\tau_\Omega \leq T]$")
     ax.set_ylim(bottom=0.0)
     ax.legend(frameon=False, fontsize=8)
