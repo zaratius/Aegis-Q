@@ -49,6 +49,16 @@ Two configs certify once the edge is fixed (fine grid, corrected envelope):
      -lam V back; with the corrected envelope lam nets out of the bound
      (0.494 vs 0.505 at lam=0.5 vs 0.1), so lam stays at 0.5 for transient
      shaping.)
+
+2026-08-06 update (Markovian law): the temporal regularizer w_r and the
+carried command u_prev are removed from the QP, matching the revised
+manuscript. The paired ablation (M=100, seeds 1000-1099) showed w_r had no
+trajectory-level effect at the adopted config (max |Delta(xi/eps)| < 5e-7,
+0/100 classification changes) because the qubit runs with the coherent
+channel effectively inactive (x2(0)=0 invariant under u=0, and w_u large
+near betaH=0). Removing it also removes the history bias from the envelope
+sup, which drops the certified bound to essentially the slack-free Doob
+floor V0/log(1/theta_b) ~ 0.36 -- see the numbers memo of that date.
 """
 
 import numpy as np
@@ -62,7 +72,7 @@ QUBIT_RHO0    = np.array([[0.78, 0.08], [0.08, 0.22]], dtype=complex)
 
 # Shared QP weights (identical across the qubit studies).  gmax=1.25 is the
 # edge-defensibility fix: kappa*gmax = 6.25 >= 5.78 (see docstring).
-QUBIT_WEIGHTS = dict(wr=50.0, c=20.0, wgamma=1.0, wdelta=1e4, gmax=1.25,
+QUBIT_WEIGHTS = dict(c=20.0, wgamma=1.0, wdelta=1e4, gmax=1.25,
                      regularized=True)
 
 # Hard guard 1: the relative buffer must be a proper fraction.

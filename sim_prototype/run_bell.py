@@ -10,10 +10,11 @@ writes the E2 figure and the Delta t-robustness control figure.
 Findings (see STATUS.md):
   - The chattering of the unregularized law is a genuine, Delta t-robust
     obstruction (Proposition V.2), not a discretization artifact.
-  - The regularized law (c = 20, w_r = 50) removes it by driving the
-    coherent control to zero near the gain degeneracy beta^H_xi ~ 0; the
-    terminal infidelity xi(T) is unchanged, since coherent control cannot
-    reduce xi where its gain vanishes.
+  - The regularized law (state-dependent w_u = c/(|beta^H_xi| + eps_f),
+    c = 20) removes it by driving the coherent control to zero near the
+    gain degeneracy beta^H_xi ~ 0; the terminal infidelity xi(T) is
+    unchanged, since coherent control cannot reduce xi where its gain
+    vanishes.
 """
 import sys, os, time
 import numpy as np
@@ -46,7 +47,7 @@ def main():
     common = dict(funnel=funnel, dt=dt, lam=0.5, theta_b=0.30,
                   wgamma=1.0, wdelta=1e3)
     cfg_un = SimConfig(regularized=False, **common)
-    cfg_re = SimConfig(regularized=True, wr=50.0, c=20.0, **common)
+    cfg_re = SimConfig(regularized=True, c=20.0, **common)
 
     print(f"Bell-state E2:  rho_0 = |00><00|, dt = {dt:.1e}, seed = {seed}")
     t0 = time.time()
@@ -54,8 +55,8 @@ def main():
     tr_re = run_trajectory(sys_, cfg_re, rho0, seed=seed)
     print(f"  two trajectories integrated in {time.time() - t0:.1f}s\n")
 
-    summary("unregularized  (w_r = 0,  w_u = 1)", tr_un)
-    summary("regularized    (w_r = 50, c = 20)", tr_re)
+    summary("unregularized  (w_u = 1)", tr_un)
+    summary("regularized    (w_u = c/(|bH|+eps_f), c = 20)", tr_re)
 
     print("\n  note: xi(T) is essentially equal for the two laws -- coherent")
     print("  control cannot reduce xi where beta^H_xi ~ 0, so switching it")

@@ -2,7 +2,8 @@
 
 Reference implementation accompanying Section V of *Quantum Dynamic Barrier
 Control*. Built fresh against the current Section IV/V (temporal
-regularisation `w_r`, state-dependent weight `w_u(rho)`, and the corrected
+state-dependent weight `w_u(rho)` (the law is Markovian: the temporal
+regulariser `w_r` was removed with the carried command), and the corrected
 qutrit / Bell operators of the Section V rewrite).
 
 This is a reference implementation. All numerical results must be validated

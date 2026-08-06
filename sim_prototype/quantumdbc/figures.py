@@ -4,7 +4,7 @@ Figure generation for Section V-E (Bell-state instance).
 Two figures are produced:
 
 * ``fig_bell_chatter``  -- the E2 comparison: the coherent control u(t)
-  under the unregularized law (w_r = 0, w_u = 1) and the regularized law,
+  under the unregularized law (w_u = 1) and the regularized law,
   integrated from rho_0 = |00><00| on a SHARED Brownian path.  Companion
   panels show the conditional infidelity xi(t) and the coherent gain
   |beta^H_xi(t)|.
@@ -101,7 +101,7 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     common = dict(funnel=funnel, dt=dt, lam=0.5, theta_b=0.30,
                   wgamma=1.0, wdelta=1e3)
     cfg_un = SimConfig(regularized=False, **common)
-    cfg_re = SimConfig(regularized=True, wr=50.0, c=20.0, **common)
+    cfg_re = SimConfig(regularized=True, c=20.0, **common)
 
     tr_un = run_trajectory(sys_, cfg_un, rho0, seed=seed)
     tr_re = run_trajectory(sys_, cfg_re, rho0, seed=seed)   # SAME seed

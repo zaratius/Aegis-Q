@@ -2,8 +2,8 @@
 Closed-loop driver: Algorithm 1 of the manuscript.
 
 Each step performs (i) coefficient evaluation, (ii) closed-form QP solution,
-(iii) Milstein propagation.  The previous coherent control is carried as
-additional scalar state, initialised to zero.
+(iii) Milstein propagation.  The law is Markovian: each step's QP depends
+on the current (rho, t) only.
 
 The controller may be run on a *model* that differs from the true plant
 (the ``design_sys`` argument of ``run_trajectory``).  This realises the
@@ -31,13 +31,12 @@ class SimConfig:
     theta_b: float = 0.10            # relative buffer: s_b(t) = theta_b * eps(t)
     c: float = 1.0                   # state-weight scale
     eps_f: float = 1e-2              # state-weight floor
-    wr: float = 5.0                  # temporal weight
     wgamma: float = 1.0              # dissipative weight
     wdelta: float = 1e3              # slack penalty
     umax: float = 1.0                # coherent bound (per channel)
     gmax: float = 1.0                # dissipative bound (per channel)
     dt: float = 1e-3
-    regularized: bool = True         # False -> w_r = 0, w_u == 1
+    regularized: bool = True         # False -> w_u == 1 (canonical CBF-QP baseline)
     project: bool = True             # positivity-preserving projection each step
 
 
@@ -64,11 +63,9 @@ def _weights(cfg: SimConfig, betaH: np.ndarray):
     m = betaH.size
     if cfg.regularized:
         wu = cfg.c / (np.abs(betaH) + cfg.eps_f)
-        wr = np.full(m, cfg.wr)
     else:
         wu = np.ones(m)
-        wr = np.zeros(m)
-    return wu, wr
+    return wu
 
 
 _CASE_SINGLE = {-1: "V", 1: "I", 2: "II", 3: "III", 4: "IV"}
@@ -131,8 +128,10 @@ def run_trajectory(sys: System, cfg: SimConfig, rho0: np.ndarray,
 
     params = np.array([
         cfg.dt, P["eta"], C["eta"], f.eps0, f.eps_T, f.r, cfg.theta_b,
-        cfg.lam, cfg.c, cfg.eps_f, cfg.wr, cfg.umax, cfg.gmax,
+        cfg.lam, cfg.c, cfg.eps_f, 0.0, cfg.umax, cfg.gmax,
         1e-12, 1e-6, cfg.wgamma, cfg.wdelta], np.float64)
+    # slot 10 (0.0) is retired: it carried the temporal weight w_r before the
+    # law went Markovian; kept as a dead slot so kernel indices stay stable.
     ints = np.array([n_steps, N, NG, m, p, single,
                      1 if cfg.project else 0, 1 if cfg.regularized else 0],
                     np.int64)
@@ -215,7 +214,6 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
     m, p = sys.m, sys.p
 
     x = to_bloch(sys, rho0)
-    u_prev = np.zeros(m)
     umax = np.full(m, cfg.umax)
     gmax = np.full(p, cfg.gmax)
 
@@ -257,9 +255,9 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
         alpha = (mu - (xi / eps_t) * float(fun.eps_dot(t))
                  + 0.5 * kappa_V * sigma ** 2)
 
-        wu, wr = _weights(cfg, betaH)
+        wu = _weights(cfg, betaH)
         qp = QPData(alpha=alpha, betaH=betaH, betaD=betaD, V=V, lam=cfg.lam,
-                    u_prev=u_prev, wu=wu, wr=wr,
+                    wu=wu,
                     wgamma=np.full(p, cfg.wgamma), wdelta=cfg.wdelta,
                     umax=umax, gmax=gmax)
         res = solve_closed_form(qp) if single else solve_multichannel(qp)
@@ -277,7 +275,6 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
         if cfg.project:
             x, neg = project_physical(sys, x)
             max_neg = max(max_neg, neg)
-        u_prev = res.u
 
     return Trajectory(
         t=np.array(rec_t), xi=np.array(rec_xi),

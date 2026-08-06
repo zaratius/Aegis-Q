@@ -97,7 +97,7 @@ def make_cfg(dt: float = DT_REPORT, wdelta: float = 1e4, **over) -> SimConfig:
     # wdelta=1e4 and gmax=1.25 follow study_config (edge-defensibility +
     # certified closed-loop bound; see study_config docstring).
     kw = dict(funnel=funnel(), lam=0.5, theta_b=0.35, c=20.0, eps_f=1e-2,
-              wr=50.0, wgamma=1.0, wdelta=wdelta, umax=1.0, gmax=1.25,
+              wgamma=1.0, wdelta=wdelta, umax=1.0, gmax=1.25,
               dt=dt, regularized=True, project=True)
     kw.update(over)
     return SimConfig(**kw)
@@ -149,7 +149,6 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
     sqrt_eta = np.sqrt(ctx["eta"])
 
     x = _to_bloch(ctx, rho0)
-    u_prev = np.zeros(1)
     umax, gmax = np.full(1, cfg.umax), np.full(1, cfg.gmax)
     confined, tau_shell, tau_funnel = True, None, None
 
@@ -185,13 +184,10 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
                  + 0.5 * kappa_V * sigma ** 2)
 
         bH, bD = np.array([betaH]), np.array([betaD])
-        if cfg.regularized:
-            wu = cfg.c / (np.abs(bH) + cfg.eps_f)
-            wr = np.full(1, cfg.wr)
-        else:
-            wu, wr = np.ones(1), np.zeros(1)
+        wu = (cfg.c / (np.abs(bH) + cfg.eps_f) if cfg.regularized
+              else np.ones(1))
         qp = QPData(alpha=alpha, betaH=bH, betaD=bD, V=V, lam=cfg.lam,
-                    u_prev=u_prev, wu=wu, wr=wr, wgamma=np.full(1, cfg.wgamma),
+                    wu=wu, wgamma=np.full(1, cfg.wgamma),
                     wdelta=cfg.wdelta, umax=umax, gmax=gmax)
         res = solve_closed_form(qp)
         u, g = float(res.u[0]), float(res.gamma[0])
@@ -218,7 +214,6 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
                 rho_p = (ctx["eye"] * ctx["N"] if sm <= 0
                          else (Vec * (w / sm)) @ Vec.conj().T)
                 x = _to_bloch(ctx, rho_p)
-        u_prev = res.u
 
     return confined, tau_shell, tau_funnel
 

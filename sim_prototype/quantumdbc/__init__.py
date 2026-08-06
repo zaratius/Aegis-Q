@@ -27,5 +27,5 @@ __all__ = [
     "solve_osqp",
     "milstein_step", "euler_step", "drift", "diffusion",
     "SimConfig", "Trajectory", "run_trajectory", "run_ensemble",
-    "qubit_nu_envelope", "closed_loop_bound",
+    "qubit_slack_envelope", "closed_loop_bound",
 ]

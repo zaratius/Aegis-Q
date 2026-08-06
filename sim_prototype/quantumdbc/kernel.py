@@ -5,7 +5,7 @@ This module is a *compiled re-implementation* of the per-step mathematics in
 ``coefficients.py``, ``integrator.py``, ``controller.py`` and the loop body of
 ``simulate.run_trajectory``.  The original pure-Python modules are retained
 unchanged and remain the validated reference (their unit tests are untouched);
-``simulate.run_trajectory`` cross-checks this kernel against them.
+``test/test_backends.py`` checks this kernel against them array-for-array.
 
 Design notes
 ------------
@@ -282,19 +282,17 @@ def _project_physical(x, G, I_over_N, N, NG):
 # QP solvers (write primal into u_cur, g_cur; return delta, nu, case-code)
 # ==========================================================================
 @njit(cache=True)
-def _solve_closed_form(u_cur, g_cur, alpha, bH, bD, V, lam, u_prev,
-                       wu, wr, wg, wd, umax, gmax):
+def _solve_closed_form(u_cur, g_cur, alpha, bH, bD, V, lam,
+                       wu, wg, wd, umax, gmax):
     lamV = lam * V
-    w_eq = wu + wr
-    hist = wr * u_prev / w_eq
-    Theta = alpha + bH * hist + lamV
+    Theta = alpha + lamV
     if Theta <= 0.0:
-        u_cur[0] = hist
+        u_cur[0] = 0.0
         g_cur[0] = 0.0
         return 0.0, 0.0, -1
-    D_I = bH * bH / w_eq + bD * bD / wg + 1.0 / wd
+    D_I = bH * bH / wu + bD * bD / wg + 1.0 / wd
     nu_I = Theta / D_I
-    u_I = (wr * u_prev - nu_I * bH) / w_eq
+    u_I = -nu_I * bH / wu
     g_I = -nu_I * bD / wg
     u_ok = abs(u_I) <= umax
     g_ok = g_I <= gmax
@@ -318,10 +316,10 @@ def _solve_closed_form(u_cur, g_cur, alpha, bH, bD, V, lam, u_prev,
         g_cur[0] = gmax
         return nu_IV / wd, nu_IV, 4
     if u_ok and (not g_ok):
-        N_III = alpha + bH * hist + bD * gmax + lamV
-        D_III = bH * bH / w_eq + 1.0 / wd
+        N_III = alpha + bD * gmax + lamV
+        D_III = bH * bH / wu + 1.0 / wd
         nu_III = N_III / D_III
-        u_III = (wr * u_prev - nu_III * bH) / w_eq
+        u_III = -nu_III * bH / wu
         if abs(u_III) <= umax:
             u_cur[0] = u_III
             g_cur[0] = gmax
@@ -341,14 +339,13 @@ def _solve_closed_form(u_cur, g_cur, alpha, bH, bD, V, lam, u_prev,
 
 
 @njit(cache=True)
-def _primal_resid(nu, alpha, betaH, betaD, V, lam, u_prev, wu, wr,
+def _primal_resid(nu, alpha, betaH, betaD, V, lam, wu,
                   wgamma, wdelta, umax, gmax, m, p, u_out, g_out):
     """Box-projected stationary primal at nu; return (delta, residual)."""
     delta = nu / wdelta
     sumH = 0.0
     for i in range(m):
-        w_eq = wu[i] + wr[i]
-        ui = (wr[i] * u_prev[i] - nu * betaH[i]) / w_eq
+        ui = -nu * betaH[i] / wu[i]
         if ui < -umax[i]:
             ui = -umax[i]
         elif ui > umax[i]:
@@ -369,17 +366,17 @@ def _primal_resid(nu, alpha, betaH, betaD, V, lam, u_prev, wu, wr,
 
 
 @njit(cache=True)
-def _solve_multichannel(u_cur, g_cur, alpha, betaH, betaD, V, lam, u_prev,
-                        wu, wr, wgamma, wdelta, umax, gmax, m, p, tol):
-    delta0, g0 = _primal_resid(0.0, alpha, betaH, betaD, V, lam, u_prev,
-                               wu, wr, wgamma, wdelta, umax, gmax, m, p,
+def _solve_multichannel(u_cur, g_cur, alpha, betaH, betaD, V, lam,
+                        wu, wgamma, wdelta, umax, gmax, m, p, tol):
+    delta0, g0 = _primal_resid(0.0, alpha, betaH, betaD, V, lam,
+                               wu, wgamma, wdelta, umax, gmax, m, p,
                                u_cur, g_cur)
     if g0 <= 0.0:
         return 0.0, 0.0, -1                          # dormant; primal at nu=0
     nu_hi = 1.0
     for _ in range(200):
-        d, r = _primal_resid(nu_hi, alpha, betaH, betaD, V, lam, u_prev,
-                             wu, wr, wgamma, wdelta, umax, gmax, m, p,
+        d, r = _primal_resid(nu_hi, alpha, betaH, betaD, V, lam,
+                             wu, wgamma, wdelta, umax, gmax, m, p,
                              u_cur, g_cur)
         if r < 0.0:
             break
@@ -388,8 +385,8 @@ def _solve_multichannel(u_cur, g_cur, alpha, betaH, betaD, V, lam, u_prev,
     hi = nu_hi
     for _ in range(200):
         mid = 0.5 * (lo + hi)
-        d, r = _primal_resid(mid, alpha, betaH, betaD, V, lam, u_prev,
-                             wu, wr, wgamma, wdelta, umax, gmax, m, p,
+        d, r = _primal_resid(mid, alpha, betaH, betaD, V, lam,
+                             wu, wgamma, wdelta, umax, gmax, m, p,
                              u_cur, g_cur)
         if r > 0.0:
             lo = mid
@@ -398,8 +395,8 @@ def _solve_multichannel(u_cur, g_cur, alpha, betaH, betaD, V, lam, u_prev,
         if hi - lo < tol:
             break
     nu = 0.5 * (lo + hi)
-    delta, r = _primal_resid(nu, alpha, betaH, betaD, V, lam, u_prev,
-                             wu, wr, wgamma, wdelta, umax, gmax, m, p,
+    delta, r = _primal_resid(nu, alpha, betaH, betaD, V, lam,
+                             wu, wgamma, wdelta, umax, gmax, m, p,
                              u_cur, g_cur)
     nsat = 0
     for i in range(m):
@@ -434,7 +431,7 @@ def run_traj_kernel(
     lam = params[7]
     cc = params[8]
     eps_f = params[9]
-    wr_const = params[10]
+    # params[10] retired (was the temporal weight w_r; law is Markovian)
     umax = params[11]
     gmax = params[12]
     tol = params[13]
@@ -452,13 +449,11 @@ def run_traj_kernel(
     regularized = ints[7]
 
     x = x0.copy()
-    u_prev = np.zeros(m, np.float64)
     u_cur = np.zeros(m, np.float64)
     g_cur = np.zeros(p, np.float64)
     betaH = np.zeros(m, np.float64)
     betaD = np.zeros(p, np.float64)
     wu = np.zeros(m, np.float64)
-    wr = np.zeros(m, np.float64)
     umax_v = np.empty(m, np.float64)
     gmax_v = np.empty(p, np.float64)
     wgamma_v = np.empty(p, np.float64)
@@ -517,19 +512,17 @@ def run_traj_kernel(
         for i in range(m):
             if regularized:
                 wu[i] = cc / (abs(betaH[i]) + eps_f)
-                wr[i] = wr_const
             else:
                 wu[i] = 1.0
-                wr[i] = 0.0
 
         if single:
             delta, nu, code = _solve_closed_form(
-                u_cur, g_cur, alpha, betaH[0], betaD[0], V, lam, u_prev[0],
-                wu[0], wr[0], wgamma, wdelta, umax, gmax)
+                u_cur, g_cur, alpha, betaH[0], betaD[0], V, lam,
+                wu[0], wgamma, wdelta, umax, gmax)
         else:
             delta, nu, code = _solve_multichannel(
-                u_cur, g_cur, alpha, betaH, betaD, V, lam, u_prev,
-                wu, wr, wgamma_v, wdelta, umax_v, gmax_v, m, p, tol)
+                u_cur, g_cur, alpha, betaH, betaD, V, lam,
+                wu, wgamma_v, wdelta, umax_v, gmax_v, m, p, tol)
 
         # record
         xi_o[n] = xi
@@ -562,8 +555,5 @@ def run_traj_kernel(
             x, neg = _project_physical(x, G, I_over_N, N, NG)
             if neg > max_neg:
                 max_neg = neg
-
-        for i in range(m):
-            u_prev[i] = u_cur[i]
 
     return max_neg, confined

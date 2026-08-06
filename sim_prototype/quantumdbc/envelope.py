@@ -2,8 +2,8 @@
 
 The deterministic slack envelope
 
-    delta_V_bar(t) = sup over Omega(t) x [-u_max, u_max] of
-                     [ (nu*(rho,t,u_prev)/w_delta - lam V(s,t)) / s ]_+
+    delta_V_bar(t) = sup over Omega(t) of
+                     [ (nu*(rho,t)/w_delta - lam V(s,t)) / s ]_+
 
 bounds the closed-loop V-drift pathwise: at the QP optimum the safety
 constraint gives E[dV|F_t]/dt <= (delta* - lam V)/s exactly, and the dormant
@@ -38,8 +38,7 @@ Richardson-style over three refinement levels). Qubit only: the QP data
 depend on (x2, x3) alone -- mu = 0, betaH = -Omega x2, betaD = -kappa xi,
 sigma = -sqrt(eta Gamma_m)(1 - x3^2), xi = (1-x3)/2; x1 enters no
 coefficient -- so Omega(t) reduces to the half-disc x2^2 + x3^2 <= 1,
-x3 >= 1 - 2(1-theta_b) eps(t). nu* is piecewise affine in u_prev, so a
-small u_prev grid including the endpoints carries the sup.
+x3 >= 1 - 2(1-theta_b) eps(t).
 """
 from __future__ import annotations
 import numpy as np
@@ -50,8 +49,7 @@ from .coefficients import _drive_amp, _kappa, _meas_rate_qubit
 
 
 def qubit_slack_envelope(sys: System, cfg, t_grid=None,
-                         n_x3: int = 161, n_x2: int = 81,
-                         u_prev_grid=(-1.0, -0.5, 0.0, 0.5, 1.0)):
+                         n_x3: int = 161, n_x2: int = 81):
     """Grid evaluation of delta_V_bar(t) on the qubit design shell.
 
     Parameters
@@ -60,7 +58,6 @@ def qubit_slack_envelope(sys: System, cfg, t_grid=None,
     cfg    : SimConfig -- supplies theta_b, lam, weights, bounds, funnel
     t_grid : time grid; defaults to 81 points on [0, funnel.T]
     n_x3, n_x2 : shell-grid resolution (x3 radial in xi, x2 coherence)
-    u_prev_grid : carried-command grid, scaled by cfg.umax
 
     Returns
     -------
@@ -82,7 +79,6 @@ def qubit_slack_envelope(sys: System, cfg, t_grid=None,
     wgamma = np.array([cfg.wgamma])
     umax_v = np.array([cfg.umax])
     gmax_v = np.array([cfg.gmax])
-    u_prevs = tuple(cfg.umax * u for u in u_prev_grid)
 
     dbar = np.zeros_like(t_grid)
     for k, t in enumerate(t_grid):
@@ -105,20 +101,17 @@ def qubit_slack_envelope(sys: System, cfg, t_grid=None,
                 betaH = np.array([-Om * x2])
                 if cfg.regularized:
                     wu = np.array([cfg.c / (abs(betaH[0]) + cfg.eps_f)])
-                    wr = np.array([cfg.wr])
                 else:
                     wu = np.array([1.0])
-                    wr = np.array([0.0])
-                for up in u_prevs:
-                    d = QPData(alpha=alpha, betaH=betaH, betaD=betaD,
-                               V=V, lam=cfg.lam, u_prev=np.array([up]),
-                               wu=wu, wr=wr, wgamma=wgamma,
-                               wdelta=cfg.wdelta,
-                               umax=umax_v, gmax=gmax_v)
-                    res = solve_closed_form(d)
-                    q = (res.delta - cfg.lam * V) / s
-                    if q > best:
-                        best = q
+                d = QPData(alpha=alpha, betaH=betaH, betaD=betaD,
+                           V=V, lam=cfg.lam,
+                           wu=wu, wgamma=wgamma,
+                           wdelta=cfg.wdelta,
+                           umax=umax_v, gmax=gmax_v)
+                res = solve_closed_form(d)
+                q = (res.delta - cfg.lam * V) / s
+                if q > best:
+                    best = q
         dbar[k] = best
     return t_grid, dbar
 

@@ -1,7 +1,13 @@
 """
 Minimum-effort safe controller (Section IV).
 
-Three solvers, all for the regularised barrier-QP (28)-(30) / (46):
+Three solvers, all for the Markovian barrier-QP: at each (rho, t),
+
+    min (wu/2) u^2 + (wgamma/2) gamma^2 + (wdelta/2) delta^2
+    s.t. alpha + betaH u + betaD gamma <= -lam V + delta,  boxes,
+
+with the state-dependent weight wu = c/(|betaH| + eps_f).  The law
+depends on (rho, t) only; there is no carried previous command.
 
 * ``solve_closed_form``  -- the literal five-case decision tree of
   Theorem IV.2, for the single-channel case (m = p = 1).  This is the
@@ -31,9 +37,7 @@ class QPData:
     betaD: np.ndarray            # dissipative gains   (len p), each < 0
     V: float                     # barrier value
     lam: float                   # exponential decay rate
-    u_prev: np.ndarray           # previous coherent control (len m)
     wu: np.ndarray               # state-dependent coherent weights (len m)
-    wr: np.ndarray               # temporal weights (len m)
     wgamma: np.ndarray           # dissipative weights (len p)
     wdelta: float                # slack penalty
     umax: np.ndarray             # coherent bounds (len m)
@@ -57,23 +61,21 @@ def solve_closed_form(d: QPData) -> QPResult:
     if d.betaH.size != 1 or d.betaD.size != 1:
         raise ValueError("solve_closed_form requires m = p = 1")
     bH = float(d.betaH[0]); bD = float(d.betaD[0])
-    u_prev = float(d.u_prev[0]); wu = float(d.wu[0]); wr = float(d.wr[0])
+    wu = float(d.wu[0])
     wg = float(d.wgamma[0]); wd = d.wdelta
     umax = float(d.umax[0]); gmax = float(d.gmax[0])
     lamV = d.lam * d.V
-    w_eq = wu + wr
-    hist = wr * u_prev / w_eq                         # history bias term
 
     # ---- Lemma IV.1: dormancy test --------------------------------------
-    Theta = d.alpha + bH * hist + lamV
+    Theta = d.alpha + lamV
     if Theta <= 0.0:
-        return QPResult(np.array([hist]), np.array([0.0]), 0.0, 0.0, "V")
+        return QPResult(np.array([0.0]), np.array([0.0]), 0.0, 0.0, "V")
 
     # ---- Case I candidate ----------------------------------------------
     N_I = Theta
-    D_I = bH ** 2 / w_eq + bD ** 2 / wg + 1.0 / wd
+    D_I = bH ** 2 / wu + bD ** 2 / wg + 1.0 / wd
     nu_I = N_I / D_I
-    u_I = (wr * u_prev - nu_I * bH) / w_eq
+    u_I = -nu_I * bH / wu
     g_I = -nu_I * bD / wg
 
     u_ok = abs(u_I) <= umax
@@ -97,10 +99,10 @@ def solve_closed_form(d: QPData) -> QPResult:
 
     # ---- Case III: gamma saturated -------------------------------------
     if u_ok and (not g_ok):
-        N_III = d.alpha + bH * hist + bD * gmax + lamV
-        D_III = bH ** 2 / w_eq + 1.0 / wd
+        N_III = d.alpha + bD * gmax + lamV
+        D_III = bH ** 2 / wu + 1.0 / wd
         nu_III = N_III / D_III
-        u_III = (wr * u_prev - nu_III * bH) / w_eq
+        u_III = -nu_III * bH / wu
         if abs(u_III) <= umax:
             return QPResult(np.array([u_III]), np.array([gmax]),
                             nu_III / wd, nu_III, "III")
@@ -124,8 +126,7 @@ def _case_IV(d, bH, bD, wd, umax, gmax, lamV, usat) -> QPResult:
 # --------------------------------------------------------------------------
 def _primal_from_nu(d: QPData, nu: float):
     """Box-projected stationary primal for a given multiplier nu >= 0."""
-    w_eq = d.wu + d.wr
-    u = (d.wr * d.u_prev - nu * d.betaH) / w_eq
+    u = -nu * d.betaH / d.wu
     u = np.clip(u, -d.umax, d.umax)
     gamma = -nu * d.betaD / d.wgamma            # betaD < 0  =>  >= 0
     gamma = np.clip(gamma, 0.0, d.gmax)
@@ -186,9 +187,9 @@ def solve_osqp(d: QPData) -> QPResult:
     m, p = d.betaH.size, d.betaD.size
     n = m + p + 1                                    # z = (u, gamma, delta)
 
-    P = sparse.diags(np.concatenate([d.wu + d.wr, d.wgamma, [d.wdelta]]),
+    P = sparse.diags(np.concatenate([d.wu, d.wgamma, [d.wdelta]]),
                      format="csc")
-    q = np.concatenate([-d.wr * d.u_prev, np.zeros(p), [0.0]])
+    q = np.zeros(n)
 
     rows = []
     lo = []
