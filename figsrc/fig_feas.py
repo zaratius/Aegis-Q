@@ -11,9 +11,9 @@ from quantumdbc.systems import qubit
 from quantumdbc.coefficients import coefficients_generic
 from quantumdbc.barrier import ExpFunnel
 
-sys_ = qubit(); fun = ExpFunnel(eps0=0.70, eps_T=0.30, T=4.0)
-umax, gmax = 1.0, 1.25            # gmax=1.25: edge-defensibility (study_config note)
-TB_ADM, TB_TIGHT = 0.35, 0.07     # theta_b=0.35 admissible GIVEN gmax=1.25; tight buffer for contrast
+sys_ = qubit(); fun = ExpFunnel(eps0=0.70, eps_T=0.0001, T=4.0)
+umax, gmax = 1.0, 3.90            # gmax=3.90: edge-defensibility at (theta_b=0.20, eps_T->0)
+TB_ADM, TB_TIGHT = 0.20, 0.07     # theta_b=0.20 admissible GIVEN gmax=3.90; tight buffer for contrast
 
 
 def speed_limit_at_boundary(t, theta_b):

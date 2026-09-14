@@ -180,34 +180,139 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
 # control experiment -- chattering is Delta t-robust, not an artifact
 # --------------------------------------------------------------------------
 def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
-                          t_curve, ci=None) -> str:
+                          t_curve, ci=None, sb_curve=None,
+                          bound=None) -> str:
     """E1 figure: qubit funnel confinement and Monte Carlo summary.
 
     Parameters
     ----------
-    trajs    : list of Trajectory (a subset is plotted individually)
+    trajs    : list of Trajectory (a subset is plotted individually;
+               breaching paths are drawn first so the rare event is visible)
     eps_curve, t_curve : the funnel epsilon(t) and its time grid
-    ci       : optional (point, lo, hi) confinement-fraction estimate with
-               a 95% Clopper-Pearson interval, in [0, 1]
+    ci       : optional (point, lo, hi) confinement fraction; drawn as a
+               "confined: ... (95% CI ...)" line at bottom right
+    sb_curve : optional shell edge (1-theta_b) epsilon(t); drawn dashed
+    bound    : optional certified shell-exit bound; annotated as
+               P[tau_Omega <= T] <= bound below the CI line
     """
     _style()
     n_show = min(25, len(trajs))
     M = len(trajs)
-    conf = [tr.confined for tr in trajs]
 
-    fig, ax = plt.subplots(2, 1, figsize=(5.4, 5.4),
-                           gridspec_kw={"height_ratios": [2, 1]})
+    fig, ax = plt.subplots(figsize=(5.4, 3.8))
 
-    # panel 1: xi(t) sample paths; breaching paths highlighted
-    for tr in trajs[:n_show]:
+    # xi(t) sample paths. The drawn subset holds the ensemble's proportions
+    # in spirit: at most 5 breaching paths (so the rare event is visible
+    # without repainting a mostly-confined ensemble red), the rest confined.
+    breach_idx = [i for i in range(M) if not trajs[i].confined][:5]
+    conf_idx = [i for i in range(M) if trajs[i].confined]
+    subset = breach_idx + conf_idx[:n_show - len(breach_idx)]
+    for i in subset:
+        tr = trajs[i]
         breached = not tr.confined
-        ax[0].plot(tr.t, tr.xi,
-                   color=(_C_UNREG if breached else _C_AUX),
-                   lw=(0.7 if breached else 0.4),
-                   alpha=(0.9 if breached else 0.55),
-                   zorder=(3 if breached else 1))
-    ax[0].plot(t_curve, eps_curve, color="k", lw=1.6,
+        ax.plot(tr.t, tr.xi,
+               color=(_C_UNREG if breached else _C_AUX),
+               lw=(0.7 if breached else 0.4),
+               alpha=(0.9 if breached else 0.55),
+               zorder=(3 if breached else 1))
+    ax.plot(t_curve, eps_curve, color="k", lw=1.6,
+           label=r"funnel $\epsilon(t)$")
+    if sb_curve is not None:
+        ax.plot(t_curve, sb_curve, color="k", lw=0.9, ls="--",
+               label=r"shell edge $(1-\theta_b)\,\epsilon(t)$")
+    ax.plot([], [], color=_C_AUX, lw=0.8, label=r"$\xi(t)$, confined")
+    ax.plot([], [], color=_C_UNREG, lw=0.8,
+           label=r"$\xi(t)$, breaching")
+    ax.set_ylabel(r"infidelity  $\xi$")
+    ax.set_xlabel(_T_LABEL)
+    ax.set_ylim(0, None)
+    ax.legend(loc="upper right", frameon=False, fontsize=8)
+
+    lines = []
+    if ci is not None:
+        pt, lo, hi = ci
+        lines.append(f"confined: {pt*100:.1f}%  "
+                     f"(95% CI [{lo*100:.1f}, {hi*100:.1f}])")
+    if bound is not None:
+        lines.append(rf"$\mathbb{{P}}[\tau_\Omega\le T]\le{bound:.3f}$")
+    if lines:
+        # anchored above the funnel tail so neither curve is occluded
+        ax.text(0.98, 0.18, "\n".join(lines), transform=ax.transAxes,
+                fontsize=7.5, color=_C_AUX, ha="right", va="bottom",
+                zorder=5, bbox=dict(facecolor="white", edgecolor="none",
+                                    alpha=0.85, pad=1.5))
+
+    fig.tight_layout()
+    path = os.path.join(outdir, "fig_qubit_confinement.pdf")
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def fig_bell_confinement(outdir: str, t, eps_curve, sb_curve,
+                         xi_paths, funnel_breached, ci=None,
+                         bound=None, u_paths=None, bH_paths=None) -> str:
+    """Certified Bell MC figure: ensemble confinement, parallel to
+    fig_qubit_confinement, optionally completed with the applied coherent
+    control and the coherent gain along the same sample paths.
+
+    Parameters
+    ----------
+    t            : shared time grid (n_steps,)
+    eps_curve    : funnel epsilon(t) on that grid
+    sb_curve     : shell edge (1-theta_b) epsilon(t) on that grid
+    xi_paths     : list/array of xi(t) sample paths (all M, used for the
+                   pointwise frequency; a subset is drawn individually)
+    funnel_breached : boolean per path, True if xi >= eps ever
+    ci           : optional (point, lo, hi) funnel-confinement fraction
+    bound        : optional certified shell-exit bound to annotate
+    u_paths      : optional per-path u_1(t) traces (same length as
+                   xi_paths); adds a control panel
+    bH_paths     : optional per-path |beta^H_1(t)| traces; adds a gain panel
+    """
+    _style()
+    xi_paths = [np.asarray(x, dtype=float) for x in xi_paths]
+    M = len(xi_paths)
+    n_show = min(25, M)
+    extra = u_paths is not None and bH_paths is not None
+
+    # the pgf backend emits every vertex as TeX tokens; at T/dt = 16000
+    # steps x 25 paths x 3 spaghetti panels TeX's memory overflows. Drawn
+    # curves are decimated to ~2000 vertices (far beyond print resolution);
+    # all statistics (confinement frequency) are computed at full
+    # resolution before decimation.
+    stride = max(1, len(np.asarray(t)) // 2000)
+    td = np.asarray(t, dtype=float)[::stride]
+
+    def _dec(x):
+        return np.asarray(x, dtype=float)[::stride]
+
+    n_rows = 3 if extra else 1
+    heights = [2, 1, 1] if extra else [1]
+    fig, ax = plt.subplots(n_rows, 1,
+                           figsize=(5.4, 6.5 if extra else 3.8),
+                           gridspec_kw={"height_ratios": heights},
+                           sharex=True, squeeze=False)
+    ax = ax[:, 0]
+
+    # drawn subset: at most 5 breaching paths (rare event visible without
+    # repainting a mostly-confined ensemble red), the rest confined
+    breach_idx = [i for i in range(M) if funnel_breached[i]][:5]
+    conf_idx = [i for i in range(M) if not funnel_breached[i]]
+    chosen = breach_idx + conf_idx[:n_show - len(breach_idx)]
+
+    def _pathstyle(breached):
+        return dict(color=(_C_UNREG if breached else _C_AUX),
+                    lw=(0.7 if breached else 0.4),
+                    alpha=(0.9 if breached else 0.55),
+                    zorder=(3 if breached else 1))
+
+    for i in chosen:
+        ax[0].plot(td, _dec(xi_paths[i]), **_pathstyle(funnel_breached[i]))
+    ax[0].plot(td, _dec(eps_curve), color="k", lw=1.6,
                label=r"funnel $\epsilon(t)$")
+    ax[0].plot(td, _dec(sb_curve), color="k", lw=0.9, ls="--",
+               label=r"shell edge $(1-\theta_b)\,\epsilon(t)$")
     ax[0].plot([], [], color=_C_AUX, lw=0.8, label=r"$\xi(t)$, confined")
     ax[0].plot([], [], color=_C_UNREG, lw=0.8,
                label=r"$\xi(t)$, breaching")
@@ -215,28 +320,38 @@ def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
     ax[0].set_ylim(0, None)
     ax[0].legend(loc="upper right", frameon=False, fontsize=8)
 
-    # panel 2: pointwise confinement frequency
-    t = trajs[0].t
-    inside = np.zeros(len(t))
-    for tr in trajs:
-        inside += (tr.xi < tr.eps).astype(float)
-    inside /= M
-    ax[1].plot(t, inside, color=_C_BLUE, lw=1.0)
-    ax[1].axhline(1.0, color=_C_AUX, lw=0.5, ls=":")
-    ax[1].set_ylabel("confinement\nfrequency")
-    ax[1].set_xlabel(_T_LABEL)
-    ax[1].set_ylim(0, 1.05)
-
-    label = f"ensemble  $M = {M}$"
+    lines = []
     if ci is not None:
         pt, lo, hi = ci
-        label += (f"\nconfined: {pt*100:.1f}%  "
-                  f"(95% CI [{lo*100:.1f}, {hi*100:.1f}])")
-    ax[1].text(0.02, 0.10, label, transform=ax[1].transAxes,
-               fontsize=7.5, color=_C_AUX, va="bottom")
+        lines.append(f"confined: {pt*100:.1f}%  "
+                     f"(95% CI [{lo*100:.1f}, {hi*100:.1f}])")
+    if bound is not None:
+        lines.append(rf"$\mathbb{{P}}[\tau_\Omega\le T]\le{bound:.3f}$")
+    if lines:
+        # anchored above the funnel tail so neither curve is occluded
+        ax[0].text(0.98, 0.28, "\n".join(lines), transform=ax[0].transAxes,
+                   fontsize=7.5, color=_C_AUX, ha="right", va="bottom",
+                   zorder=5, bbox=dict(facecolor="white", edgecolor="none",
+                                       alpha=0.85, pad=1.5))
 
+    if extra:
+        # same subset, same colors: the applied coherent control and the
+        # coherent gain the law responds to (first channel; the
+        # preparation tilt sits on qubit 1)
+        for i in chosen:
+            ax[1].plot(td, _dec(u_paths[i]),
+                       **_pathstyle(funnel_breached[i]))
+        ax[1].axhline(0.0, color=_C_AUX, lw=0.5, ls=":")
+        ax[1].set_ylabel(r"control  $u_1$")
+        for i in chosen:
+            ax[2].plot(td, _dec(bH_paths[i]),
+                       **_pathstyle(funnel_breached[i]))
+        ax[2].set_ylabel(r"gain  $|\beta^{H_1}_\xi|$")
+        ax[2].set_ylim(0, None)
+
+    ax[-1].set_xlabel(_T_LABEL)
     fig.align_ylabels(ax)
-    path = os.path.join(outdir, "fig_qubit_confinement.pdf")
+    path = os.path.join(outdir, "fig_bell_confinement.pdf")
     fig.savefig(path)
     plt.close(fig)
     return path

@@ -135,8 +135,8 @@ def _plot_robustness_cdf(outdir, exc_rob, exc_opt):
     ax.annotate(f"{wo:.2f}", (wo, 1.0), (wo, 0.85), fontsize=6,
                 color="#000000", ha="center")
     ax.set_xlim(0.5, xmax); ax.set_ylim(0, 1.02)
-    ax.set_xlabel(r"per-path peak margin ratio $\max_t \xi/\epsilon$")
-    ax.set_ylabel("empirical CDF")
+    ax.set_xlabel(r"$\max_t \xi/\epsilon$")
+    ax.set_ylabel("ECDF")
     ax.legend(loc="center right", handlelength=1.5)
     p = os.path.join(outdir, "fig_robustness.pdf")
     fig.savefig(p); plt.close(fig)

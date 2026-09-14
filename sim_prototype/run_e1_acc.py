@@ -49,8 +49,16 @@ def clopper_pearson(k, n, alpha=0.05):
     return lo, hi
 
 
+# Seed base for the E1 ensemble. History: the paper's original M = 1000
+# ensemble (92.7% funnel-respect, CI [90.9, 94.2]) ran at SEED0 = 1000;
+# changed to 5000 on 2026-08-08 (fresh draw, same law/geometry) -- the
+# figure annotation numbers shift within CI noise, so re-sync the numbers
+# quoted in Applications (deadline paragraph) with the new printout.
+SEED0 = 5000
+
+
 def _simulate_single_path(k, sys_, cfg, rho0):
-    return run_trajectory(sys_, cfg, rho0, seed=1000 + k, store=True)
+    return run_trajectory(sys_, cfg, rho0, seed=SEED0 + k, store=True)
 
 
 def main():
@@ -103,12 +111,24 @@ def main():
     print("   qubit_nu_envelope + closed_loop_bound -- and is what Table I")
     print("   and Section V-E4 report)")
 
+    # certified a-priori bound for the figure annotation (coarse envelope
+    # grid; the value is ladder-stable to <1e-4, see the redesign memo)
+    from quantumdbc import qubit_slack_envelope, closed_loop_bound
+    t0 = time.time()
+    tg, dbar = qubit_slack_envelope(sys_, cfg, n_x3=161, n_x2=81)
+    cert, _ = closed_loop_bound(cfg, tg, dbar, 1.0 - float(QUBIT_RHO0[0, 0].real))
+    print(f"  certified a-priori bound (envelope, coarse grid): "
+          f"P[tau_Omega <= T] <= {cert:.4f}  ({time.time()-t0:.0f}s)")
+
     outdir = os.path.join(os.path.dirname(__file__), "..", "figures")
     os.makedirs(outdir, exist_ok=True)
     n_conf = M - n_funnel                  # funnel-confined: never crossed eps
     lc, hc = clopper_pearson(n_conf, M)
     p = fig_qubit_confinement(outdir, trajs, funnel.eps(trajs[0].t),
-                              trajs[0].t, ci=(n_conf / M, lc, hc))
+                              trajs[0].t, ci=(n_conf / M, lc, hc),
+                              sb_curve=(1.0 - QUBIT_THETA_B)
+                              * funnel.eps(trajs[0].t),
+                              bound=cert)
     print(f"  wrote {p}")
 
 

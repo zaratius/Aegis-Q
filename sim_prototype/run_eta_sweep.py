@@ -87,18 +87,21 @@ _FD = 1e-6  # central-difference step for the Milstein (G.grad)G term
 # Canonical config / system builders                                           #
 # --------------------------------------------------------------------------- #
 def funnel() -> ExpFunnel:
-    # Relative buffer (funnel gauge): the design shell {xi <= (1-theta_b) eps}
-    # never empties, so the old eps_T-vs-buffer conflict is gone. eps_T = 0.30
-    # matches the rates reported in the text and Table II.
-    return ExpFunnel(eps0=0.70, eps_T=0.30, T=4.0, tol_frac=0.05)
+    # Imported from study_config so this file cannot drift from the certified
+    # design (it previously hard-coded eps_T = 0.30).
+    from quantumdbc.study_config import QUBIT_FUNNEL
+    return QUBIT_FUNNEL
 
 
 def make_cfg(dt: float = DT_REPORT, wdelta: float = 1e4, **over) -> SimConfig:
-    # wdelta=1e4 and gmax=1.25 follow study_config (edge-defensibility +
-    # certified closed-loop bound; see study_config docstring).
-    kw = dict(funnel=funnel(), lam=0.5, theta_b=0.35, c=20.0, eps_f=1e-2,
-              wgamma=1.0, wdelta=wdelta, umax=1.0, gmax=1.25,
-              dt=dt, regularized=True, project=True)
+    # theta_b / gmax imported from study_config so this file can no longer
+    # drift from the certified design (it previously hard-coded 0.35/1.25
+    # while CLAIMING to follow study_config).
+    from quantumdbc.study_config import QUBIT_THETA_B, QUBIT_WEIGHTS
+    kw = dict(funnel=funnel(), lam=0.5, theta_b=QUBIT_THETA_B, c=20.0,
+              eps_f=1e-2, wgamma=1.0, wdelta=wdelta, umax=1.0,
+              gmax=QUBIT_WEIGHTS["gmax"], dt=dt, regularized=True,
+              project=True)
     kw.update(over)
     return SimConfig(**kw)
 

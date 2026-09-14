@@ -16,7 +16,8 @@ from .controller import (QPData, QPResult, solve_closed_form,
                          solve_multichannel, solve_osqp)
 from .integrator import milstein_step, euler_step, drift, diffusion
 from .simulate import SimConfig, Trajectory, run_trajectory, run_ensemble
-from .envelope import qubit_slack_envelope, closed_loop_bound
+from .envelope import (qubit_slack_envelope, bell_slack_envelope,
+                       closed_loop_bound)
 
 __all__ = [
     "System", "qubit", "qutrit", "bell", "ggm_generators",
@@ -27,5 +28,5 @@ __all__ = [
     "solve_osqp",
     "milstein_step", "euler_step", "drift", "diffusion",
     "SimConfig", "Trajectory", "run_trajectory", "run_ensemble",
-    "qubit_slack_envelope", "closed_loop_bound",
+    "qubit_slack_envelope", "bell_slack_envelope", "closed_loop_bound",
 ]
