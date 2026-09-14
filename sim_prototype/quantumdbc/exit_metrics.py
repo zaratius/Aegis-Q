@@ -1,11 +1,9 @@
 """Post-hoc exit metrics for a stored closed-loop trajectory.
 
-Computes the two distinct exit events of the funnel-gauge Section III theory,
-plus the running-max overshoot (the plateau-vs-decay disambiguator) and the
-V-space accumulated slack (the Corollary III.2 quantity).
+Computes the two distinct exit events of the funnel-gauge Section III theory
 
 Works entirely from a stored trajectory (run with store=True); it does not
-touch run_trajectory internals, so it is safe to bolt onto existing scripts.
+touch run_trajectory internals.
 
 The two events
 --------------
@@ -24,42 +22,18 @@ The two events
               refinement means the supermartingale is FAILING (funnel
               infeasible on the realized shell), not "noise bounded by Doob".
 
-Why gate the slack at s >= theta_b * eps
-----------------------------------------
-  The V-space slack is delta_V = (-V_s) delta_QP = delta_QP / s. The 1/s
-  factor diverges as s -> 0. Corollary III.2's shell bound applies on
-  [0, tau_Omega), where s >= theta_b eps(t) >= theta_b eps(T) keeps Delta(T)
-  finite. Accumulating past tau_Omega toward s -> 0 diverges -- and that
-  divergence is precisely WHY Doob does not forbid funnel-exits -- so it must
-  not leak into the shell bound. Hence the gate.
 """
 
 import numpy as np
 
 
 def exit_metrics(tr, theta_b):
-    """Return a dict of exit metrics for one stored trajectory.
-
-    Parameters
-    ----------
-    tr      : trajectory with .xi, .eps, .t, .delta arrays (store=True)
-    theta_b : relative buffer (same value used in the SimConfig)
-
-    Returns
-    -------
-    dict with keys:
-      tau_Omega, tau_aleph : first-passage times (np.inf if no exit on [0,T])
-      shell_exit, funnel_exit : bool, whether each event occurred on [0,T]
-      runmax  : max_t xi/eps  (overshoot; runmax-1 is the scaling observable)
-      Delta_T : V-space accumulated slack, sum(delta/s) dt gated on the shell
-      V_level : the constant barrier level log(1/theta_b) the shell sits at
-    """
     xi  = np.asarray(tr.xi, dtype=float)
     eps = np.asarray(tr.eps, dtype=float)
     t   = np.asarray(tr.t, dtype=float)
 
-    s = eps - xi                                  # TRUE margin (not floored)
-    sb = theta_b * eps                            # relative buffer width
+    s = eps - xi                                
+    sb = theta_b * eps                            
     if t.size > 1:
         dt = float(np.median(np.diff(t)))
     else:
@@ -68,14 +42,12 @@ def exit_metrics(tr, theta_b):
     below_shell = s < sb
     exited      = s <= 0.0
 
-    # argmax on a boolean array returns the FIRST True (first-passage), or 0
-    # if all False -- so guard with .any().
+
     tau_Omega = float(t[np.argmax(below_shell)]) if below_shell.any() else np.inf
     tau_aleph = float(t[np.argmax(exited)])       if exited.any()      else np.inf
 
     runmax = float(np.max(xi / eps))
 
-    # V-space slack, gated to the shell so the 1/s factor stays bounded.
     delta = np.asarray(getattr(tr, "delta", np.zeros_like(t)), dtype=float)
     gate  = s >= sb
     if gate.any():
@@ -97,20 +69,6 @@ def exit_metrics(tr, theta_b):
 
 
 def overshoot_scaling(dts, mean_overshoots, T):
-    """Fit mean overshoot (mean of runmax-1) against sqrt(dt ln(T/dt)).
-
-    A near-boundary diffusion's running-max overshoot over a fixed horizon
-    scales like sqrt(dt ln(T/dt)). Fitting that to the data separates the
-    two hypotheses by the INTERCEPT:
-
-      intercept ~ 0  -> finite Delta(T), continuum funnel-exit prob 0:
-                        overshoots are finite-dt and vanish under refinement
-                        (Framing B / O(dt) artifact).
-      intercept > 0  -> genuine continuum overshoot, positive exit prob
-                        (Framing A / Doob-bounded noise excursion).
-
-    Returns (slope, intercept).
-    """
     dts = np.asarray(dts, dtype=float)
     y   = np.asarray(mean_overshoots, dtype=float)
     x   = np.sqrt(dts * np.log(T / dts))

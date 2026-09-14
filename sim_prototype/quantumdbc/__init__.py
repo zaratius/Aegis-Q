@@ -1,13 +1,3 @@
-"""
-Quantum Dynamic Barrier Control -- reference simulation.
-
-Reference implementation accompanying Section V of the manuscript.  The
-operator data for the qutrit and Bell instances follow the corrected
-Section V rewrite (two direct-to-ground dissipators; joint-parity readout).
-
-This code is a reference implementation: results must be validated against
-the analytic derivation before use in the paper.
-"""
 from .systems import System, qubit, qutrit, bell, ggm_generators
 from .coefficients import (coefficients_generic, coefficients_closed_form,
                            to_bloch, from_bloch, infidelity)

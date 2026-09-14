@@ -1,6 +1,4 @@
-"""Fig 4 -- origin of the qubit exit rates. Grouped bars in the shared
-shell/funnel colours with 95% Clopper-Pearson whiskers; twin panels share one
-rate axis. Counts come ONLY from sim_prototype/eta_sweep_results.json."""
+#Fig 5 -- origin of the qubit exit rates. Counts come ONLY from sim_prototype/eta_sweep_results.json.
 import os, sys, json
 sys.path.insert(0, '.')
 import numpy as np, matplotlib.pyplot as plt

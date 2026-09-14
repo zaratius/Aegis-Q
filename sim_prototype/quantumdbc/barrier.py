@@ -37,20 +37,6 @@ class LogBarrier:
 # Funnel-gauge barrier  V(s,t) = -log(s / eps(t))
 # --------------------------------------------------------------------------
 class FunnelGaugeBarrier:
-    """Funnel-gauge barrier of the revised Section III-A.
-
-    V(s,t) = -log(s / eps(t)): the tolerance itself sets the scale.  The
-    s-derivatives coincide with the fixed-gauge LogBarrier,
-
-        V_s = -1/s,   V_ss = 1/s^2,   zeta_V = 1/s,
-
-    so the KKT reduction is untouched; the explicit time dependence enters
-    only through the gauge term  dV/dt|_s = eps_dot/eps <= 0, which cancels
-    the contraction cost in the QP drift: the fixed-gauge charge -eps_dot
-    in alpha is replaced by -(xi/eps) eps_dot, vanishing at the target.
-    Pairs with the relative buffer s_b(t) = theta_b eps(t), so the shell
-    sits at the constant barrier level log(1/theta_b).
-    """
     def V(self, s: np.ndarray | float, eps_t: np.ndarray | float):
         return -np.log(np.asarray(s) / np.asarray(eps_t))
 
@@ -69,13 +55,6 @@ class FunnelGaugeBarrier:
 # --------------------------------------------------------------------------
 @dataclass
 class ExpFunnel:
-    """Exponentially contracting funnel,
-
-        epsilon(t) = eps_T + (eps0 - eps_T) * exp(-r t),
-
-    monotone decreasing with epsilon(0)=eps0 and epsilon(T) -> eps_T.
-    The rate r is chosen so that epsilon(T) = eps_T + tol_frac*(eps0-eps_T).
-    """
     eps0: float
     eps_T: float
     T: float

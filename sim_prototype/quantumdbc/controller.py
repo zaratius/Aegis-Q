@@ -1,34 +1,13 @@
 """
-Minimum-effort safe controller (Section IV).
-
-Three solvers, all for the Markovian barrier-QP: at each (rho, t),
-
-    min (wu/2) u^2 + (wgamma/2) gamma^2 + (wdelta/2) delta^2
-    s.t. alpha + betaH u + betaD gamma <= -lam V + delta,  boxes,
-
-with the state-dependent weight wu = c/(|betaH| + eps_f).  The law
-depends on (rho, t) only; there is no carried previous command.
-
-* ``solve_closed_form``  -- the literal five-case decision tree of
-  Theorem IV.2, for the single-channel case (m = p = 1).  This is the
-  controller used for the qubit and the object validated against OSQP.
-
-* ``solve_multichannel`` -- the master equation (38) solved as a monotone
-  one-dimensional root find in the safety multiplier nu; valid for any
-  m, p, hence used for the qutrit and Bell instances.  For m = p = 1 it
-  reproduces ``solve_closed_form`` (checked in tests).
-
-* ``solve_osqp``         -- reference solution of the same QP via OSQP,
-  for cross-validation only (never called in the closed loop).
+Minimum-effort safe controller
 """
 from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 
 
-# --------------------------------------------------------------------------
+
 # Data containers
-# --------------------------------------------------------------------------
 @dataclass
 class QPData:
     """Pointwise QP data at one (rho, t)."""
@@ -53,9 +32,7 @@ class QPResult:
     case: str
 
 
-# --------------------------------------------------------------------------
 # Theorem IV.2 -- five-case closed form (single channel)
-# --------------------------------------------------------------------------
 def solve_closed_form(d: QPData) -> QPResult:
     """Exact five-case solution of the QP for m = p = 1."""
     if d.betaH.size != 1 or d.betaD.size != 1:
@@ -66,12 +43,12 @@ def solve_closed_form(d: QPData) -> QPResult:
     umax = float(d.umax[0]); gmax = float(d.gmax[0])
     lamV = d.lam * d.V
 
-    # ---- Lemma IV.1: dormancy test --------------------------------------
+    # Lemma IV.1: dormancy test
     Theta = d.alpha + lamV
     if Theta <= 0.0:
         return QPResult(np.array([0.0]), np.array([0.0]), 0.0, 0.0, "V")
 
-    # ---- Case I candidate ----------------------------------------------
+    # Case I candidate
     N_I = Theta
     D_I = bH ** 2 / wu + bD ** 2 / wg + 1.0 / wd
     nu_I = N_I / D_I
@@ -85,7 +62,7 @@ def solve_closed_form(d: QPData) -> QPResult:
         return QPResult(np.array([u_I]), np.array([g_I]),
                         nu_I / wd, nu_I, "I")
 
-    # ---- Case II: u saturated ------------------------------------------
+    # Case II: u saturated
     if (not u_ok) and g_ok:
         usat = umax * np.sign(u_I)
         N_II = d.alpha + bH * usat + lamV
@@ -97,7 +74,7 @@ def solve_closed_form(d: QPData) -> QPResult:
                             nu_II / wd, nu_II, "II")
         return _case_IV(d, bH, bD, wd, umax, gmax, lamV, usat)
 
-    # ---- Case III: gamma saturated -------------------------------------
+    # Case III: gamma saturated
     if u_ok and (not g_ok):
         N_III = d.alpha + bD * gmax + lamV
         D_III = bH ** 2 / wu + 1.0 / wd
@@ -109,7 +86,7 @@ def solve_closed_form(d: QPData) -> QPResult:
         usat = umax * np.sign(u_III)
         return _case_IV(d, bH, bD, wd, umax, gmax, lamV, usat)
 
-    # ---- Case IV: both saturated ---------------------------------------
+    # Case IV: both saturated
     usat = umax * np.sign(u_I)
     return _case_IV(d, bH, bD, wd, umax, gmax, lamV, usat)
 
@@ -121,9 +98,6 @@ def _case_IV(d, bH, bD, wd, umax, gmax, lamV, usat) -> QPResult:
                     nu_IV / wd, nu_IV, "IV")
 
 
-# --------------------------------------------------------------------------
-# Master equation (38) as a monotone 1-D root find -- multi-channel
-# --------------------------------------------------------------------------
 def _primal_from_nu(d: QPData, nu: float):
     """Box-projected stationary primal for a given multiplier nu >= 0."""
     u = -nu * d.betaH / d.wu
@@ -149,7 +123,6 @@ def solve_multichannel(d: QPData, tol: float = 1e-12) -> QPResult:
         u, gamma, delta = _primal_from_nu(d, 0.0)
         return QPResult(u, gamma, 0.0, 0.0, "V")
 
-    # bracket: g decreases to -inf as nu grows (delta term dominates)
     nu_hi = 1.0
     for _ in range(200):
         if _residual(d, nu_hi) < 0.0:
@@ -159,7 +132,7 @@ def solve_multichannel(d: QPData, tol: float = 1e-12) -> QPResult:
         raise RuntimeError("failed to bracket the safety multiplier")
 
     lo, hi = 0.0, nu_hi
-    for _ in range(200):                             # bisection on monotone g
+    for _ in range(200):                             
         mid = 0.5 * (lo + hi)
         if _residual(d, mid) > 0.0:
             lo = mid
@@ -176,9 +149,7 @@ def solve_multichannel(d: QPData, tol: float = 1e-12) -> QPResult:
     return QPResult(u, gamma, delta, nu, case)
 
 
-# --------------------------------------------------------------------------
 # OSQP reference solve of the QP (46) -- cross-validation only
-# --------------------------------------------------------------------------
 def solve_osqp(d: QPData) -> QPResult:
     """Solve the same QP with OSQP.  Used only to validate the closed form."""
     import osqp

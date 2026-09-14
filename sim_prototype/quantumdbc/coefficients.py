@@ -1,25 +1,13 @@
 """
 Error-coordinate coefficients (mu_xi, beta^H, beta^D, sigma_xi).
-
-Two independent code paths are provided:
-
-* ``coefficients_generic`` evaluates the trace formulas (7)-(10) of the
-  manuscript directly on a density matrix.  This is the path used by the
-  closed-loop simulation; it works for any system.
-
-* ``coefficients_closed_form`` returns the Bloch-coordinate expressions of
-  Lemmas V.1-V.2 (qubit, qutrit).  It exists solely as a test oracle:
-  ``tests/test_coefficients.py`` asserts the two agree to machine precision,
-  which verifies the algebra of Section V.
 """
 from __future__ import annotations
 import numpy as np
 from .systems import System
 
 
-# --------------------------------------------------------------------------
+
 # Lindblad / innovation superoperators, eq. (3)
-# --------------------------------------------------------------------------
 def lindblad(Lop: np.ndarray, rho: np.ndarray) -> np.ndarray:
     """Dissipator  D[L] rho = L rho L^dag - (1/2){L^dag L, rho}."""
     Ld = Lop.conj().T
@@ -33,9 +21,7 @@ def innovation(Lop: np.ndarray, rho: np.ndarray) -> np.ndarray:
     return A - np.trace(A) * rho
 
 
-# --------------------------------------------------------------------------
 # Generic coefficients (trace formulas)
-# --------------------------------------------------------------------------
 def coefficients_generic(sys: System, rho: np.ndarray) -> dict:
     """Return mu, betaH (len m), betaD (len p), sigma at state ``rho``.
 
@@ -72,9 +58,7 @@ def _real(z, tol: float = 1e-9):
     return arr.real if arr.ndim else float(arr.real)
 
 
-# --------------------------------------------------------------------------
 # Bloch-vector conversions, eq. (42)
-# --------------------------------------------------------------------------
 def to_bloch(sys: System, rho: np.ndarray) -> np.ndarray:
     """x_k = 2 Tr(T_k rho)."""
     return np.array([2.0 * np.trace(T @ rho).real for T in sys.gens])
@@ -93,18 +77,8 @@ def infidelity(sys: System, rho: np.ndarray) -> float:
     return float(1.0 - np.trace(sys.Pi @ rho).real)
 
 
-# --------------------------------------------------------------------------
 # Closed-form Bloch coefficients -- TEST ORACLES (Lemmas V.1, V.2)
-# --------------------------------------------------------------------------
 def coefficients_closed_form(sys: System, rho: np.ndarray) -> dict:
-    """Lemma V.1 / V.2 closed forms, for qubit and qutrit only.
-
-    Used by tests to verify the algebra of Section V against the generic
-    trace evaluation.  Coherences are addressed through explicit operators
-    rather than Bloch-vector indices, so the result is independent of the
-    generator ordering.  The Bell case (Lemma V.4) is convention-sensitive
-    and is verified structurally instead -- see test_coefficients.py.
-    """
     xi = infidelity(sys, rho)
     if sys.name == "qubit":
         from .systems import SX, SY, SZ
@@ -135,7 +109,7 @@ def coefficients_closed_form(sys: System, rho: np.ndarray) -> dict:
     raise ValueError(f"no closed form registered for system '{sys.name}'")
 
 
-# -- small helpers to recover scalar parameters from operator data ----------
+# small helpers to recover scalar parameters from operator data
 def _drive_amp(Hc: np.ndarray) -> float:
     return float(np.max(np.abs(Hc)).real)
 

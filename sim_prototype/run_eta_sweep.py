@@ -60,13 +60,8 @@ from quantumdbc.exit_metrics import exit_metrics
 import concurrent.futures
 from functools import lru_cache
 
-# --------------------------------------------------------------------------- #
-# Canonical qubit instance -- Table II of the manuscript.                      #
-# --------------------------------------------------------------------------- #
-# NOTE on dt: Table II currently lists dt = 5e-4 for the qubit. That step is
-# coarse enough to alias the early transient (it sits on the "artifact" side of
-# the dt panel). The reported rates and the eta panel use the converged step
-# DT_REPORT below; update Table II to match.
+
+# Canonical qubit instance
 DT_REPORT = 1.5e-4
 
 RHO0 = np.array([[0.78, 0.08], [0.08, 0.22]], dtype=complex)  # xi0 = 0.22
@@ -83,20 +78,13 @@ RESULTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 _FD = 1e-6  # central-difference step for the Milstein (G.grad)G term
 
 
-# --------------------------------------------------------------------------- #
-# Canonical config / system builders                                           #
-# --------------------------------------------------------------------------- #
+# Canonical config / system builders                                           
 def funnel() -> ExpFunnel:
-    # Imported from study_config so this file cannot drift from the certified
-    # design (it previously hard-coded eps_T = 0.30).
     from quantumdbc.study_config import QUBIT_FUNNEL
     return QUBIT_FUNNEL
 
 
 def make_cfg(dt: float = DT_REPORT, wdelta: float = 1e4, **over) -> SimConfig:
-    # theta_b / gmax imported from study_config so this file can no longer
-    # drift from the certified design (it previously hard-coded 0.35/1.25
-    # while CLAIMING to follow study_config).
     from quantumdbc.study_config import QUBIT_THETA_B, QUBIT_WEIGHTS
     kw = dict(funnel=funnel(), lam=0.5, theta_b=QUBIT_THETA_B, c=20.0,
               eps_f=1e-2, wgamma=1.0, wdelta=wdelta, umax=1.0,
@@ -110,9 +98,6 @@ def make_system(eta: float = 0.6, kappa: float = 5.0):
     return qubit(Omega=20.0, Gamma_m=1.0, kappa=kappa, eta=eta)
 
 
-# --------------------------------------------------------------------------- #
-# Vectorized single-channel qubit path (faithful mirror of run_trajectory)     #
-# --------------------------------------------------------------------------- #
 def _ctx(sys_):
     G = np.stack(sys_.gens)  # (3, 2, 2) su(2) generators, <Tj,Tk> = delta/2
     return dict(N=sys_.N, Pi=sys_.Pi, H0=sys_.H0, Hc=sys_.Hc[0], L=sys_.L,
@@ -138,11 +123,6 @@ def _innovation(L, Ld, rho):
 
 
 def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
-    """One closed-loop sample path. Returns (confined, tau_shell, tau_funnel).
-
-    Mathematically identical to quantumdbc.simulate.run_trajectory for the
-    single-channel qubit; see validate().
-    """
     rng = np.random.default_rng(seed)
     fun = cfg.funnel
     n_steps = (int(round(fun.T / cfg.dt)) if t_stop is None
@@ -165,13 +145,13 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
             confined = False
             if tau_funnel is None:
                 tau_funnel = t
-        sb_t = cfg.theta_b * eps_t               # relative buffer width
+        sb_t = cfg.theta_b * eps_t            
         gap = eps_t - xi
         if gap < sb_t and tau_shell is None:
             tau_shell = t
         s = gap if gap > sb_t else sb_t
-        V = float(-np.log(s / eps_t))            # funnel-gauge barrier
-        kappa_V = 1.0 / s  # = -V_ss/V_s, gauge-invariant
+        V = float(-np.log(s / eps_t))           
+        kappa_V = 1.0 / s  
 
         lind_L = _lindblad(L, Ld, rho)
         lind_Lc = _lindblad(Lc, Lcd, rho)
@@ -182,7 +162,6 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
         betaH = float((1j * np.trace((rho @ Pi - Pi @ rho) @ Hc)).real)
         betaD = float((-np.trace(Pi @ lind_Lc)).real)
         sigma = float((-sqrt_eta * np.trace(Pi @ innov_L)).real)
-        # gauge alpha: contraction charge scaled by xi/eps
         alpha = (mu - (xi / eps_t) * float(fun.eps_dot(t))
                  + 0.5 * kappa_V * sigma ** 2)
 
@@ -195,7 +174,7 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
         res = solve_closed_form(qp)
         u, g = float(res.u[0]), float(res.gamma[0])
 
-        # Milstein step (identical to integrator.milstein_step)
+        # Milstein step 
         H = H0 + u * Hc
         drift = -1j * (H @ rho - rho @ H) + lind_L + g * lind_Lc
         F = _to_bloch(ctx, drift)
@@ -221,9 +200,7 @@ def run_path(ctx, cfg: SimConfig, rho0, seed=0, t_stop=None):
     return confined, tau_shell, tau_funnel
 
 
-# --------------------------------------------------------------------------- #
-# Statistics + storage                                                         #
-# --------------------------------------------------------------------------- #
+# Statistics + storage                                                         
 def clopper_pearson(k, n, alpha=0.05):
     lo = stats.beta.ppf(alpha / 2, k, n - k + 1) if k > 0 else 0.0
     hi = stats.beta.ppf(1 - alpha / 2, k + 1, n - k) if k < n else 1.0
@@ -242,9 +219,8 @@ def _save(d):
         json.dump(d, f, indent=2)
 
 
-# --------------------------------------------------------------------------- #
-# Parallel sweep point: each seed is an independent run_trajectory (Numba)      #
-# --------------------------------------------------------------------------- #
+
+# Parallel sweep point: each seed is an independent run_trajectory (Numba)      
 @lru_cache(maxsize=32)
 def _system_for(knob, value):
     return make_system(eta=value) if knob == "eta" else make_system()
@@ -259,11 +235,6 @@ def _cfg_for(knob, value):
 
 
 def _eta_worker(args):
-    """One independent sample path -> (seed, confined, tau_shell, tau_funnel).
-
-    Runs the compiled run_trajectory and the shared exit_metrics, so the sweep
-    uses the same validated kernel as the rest of the codebase. Module-level and
-    picklable for ProcessPoolExecutor (spawn-safe on macOS)."""
     knob, value, seed, t_stop = args
     sys_ = _system_for(knob, float(value))
     cfg = _cfg_for(knob, value)
@@ -276,11 +247,6 @@ def _eta_worker(args):
 
 
 def _run_point(label, knob, value, M, seed0, t_stop=T_STOP):
-    """Run/extend one sweep point, accumulating seeds in RESULTS[label].
-
-    The missing seeds for this point are integrated in parallel across the
-    available P-cores; results merge into the incremental JSON exactly as before
-    (re-running a label with larger M computes only the new seeds)."""
     cfg = _cfg_for(knob, value)
     db = _load()
     rec = db.get(label, {"knob": knob, "value": value, "dt": cfg.dt,
@@ -316,14 +282,11 @@ def sweep(knob, M, seed0=0):
     grid = {"eta": ETA_GRID, "dt": DT_GRID, "wdelta": WDELTA_GRID}[knob]
     print(f"== {knob} sweep, M={M} per point (early-stop t={T_STOP}) ==")
     for v in grid:
-        # eta=0 is deterministic -> a handful of seeds pins the exact zero
         Mv = min(M, 20) if (knob == "eta" and v == 0.0) else M
         _run_point(f"{knob}={v:g}", knob, v, Mv, seed0)
 
 
-# --------------------------------------------------------------------------- #
-# Validation                                                                   #
-# --------------------------------------------------------------------------- #
+# Validation                                                                   
 def validate(seeds=(0, 1, 2, 7), buffers=(0.25, 0.35)):
     """Confirm run_path reproduces run_trajectory to ~1e-12."""
     print("== validate: run_path vs quantumdbc.run_trajectory ==")
@@ -362,9 +325,8 @@ def validate_early_stop(M=40, seed0=0):
           f"(< t_stop={T_STOP}: {max_tau < T_STOP})")
 
 
-# --------------------------------------------------------------------------- #
-# Reporting                                                                    #
-# --------------------------------------------------------------------------- #
+
+# Reports                                                                   
 def summary():
     db = _load()
     if not db:

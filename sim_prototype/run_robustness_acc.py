@@ -1,41 +1,11 @@
 """
-Robustness to dissipative-rate uncertainty: Section V-E8 study.  Parallelized.
-
-Accelerated version of run_robustness.py, following the ProcessPoolExecutor
-pattern of the other *_acc scripts.  The work is SIX ensembles --
-
-    3 plant rates kappa in {kappa_min, kappa_mid, kappa_max}
-  x 2 designs   {robust = kappa_min, optimistic = kappa_max}
-
--- each of M trajectories.  Rather than run them as six serial loops, all
-6*M trajectories are flattened into one task list and dispatched to a single
-pool: no worker idles between ensembles, and the macOS 'spawn' cost is paid
-once.  Each worker reduces its trajectory to a scalar tuple (confined flag +
-per-path max xi/eps) via exit_metrics and discards the path, so peak memory
-is one trajectory per worker.
-
-Geometry and weights come from quantumdbc.study_config, so this study uses
-the SAME funnel / buffer as E1 / breach / feasibility (non-empty shell;
-the old hard-coded eps_T=0.12, s_b=0.25 had the empty-shell bug).
-
-SHARED-NOISE CONTRACT (preserved from the serial version): for a given
-(plant kappa, trajectory index k) the robust and optimistic controllers use
-the SAME seed 5000+k, so the two controllers are compared on identical
-Wiener paths.  Seeds depend only on k, never on the design, so this holds
-across designs; results are bit-identical to the serial run.
-
-The Section V figure (empirical CDF of the per-path peak margin ratio on the
-worst-case plant) is rendered HERE, from the real exc_worst arrays -- no
-reconstruction.  The arrays are also dumped to robustness_excursions.npz so
-the figure can be regenerated without re-running the 6*M-trajectory sweep.
+Robustness to dissipative-rate uncertainty
 
     python scripts/run_robustness_acc.py [M]          # M defaults to 40
 """
 
-# -------------------------------------------------------------------------
-# APPLE ACCELERATE GRIDLOCK PREVENTION -- before any numpy import (also in
-# the spawned children, which re-execute this file)
-# -------------------------------------------------------------------------
+
+# APPLE ACCELERATE GRIDLOCK PREVENTION 
 import os
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -55,14 +25,8 @@ from quantumdbc.study_config import (
     QUBIT_FUNNEL, QUBIT_THETA_B, QUBIT_LAM, QUBIT_RHO0, QUBIT_WEIGHTS,
 )
 from quantumdbc.exit_metrics import exit_metrics
-# NOTE: no figures.py import -- this script renders its own figure (below),
-# so the worker processes never import matplotlib.
 
-# dt for the robustness ensembles.  Note: at Omega=20 the loop is fully
-# smooth only at dt <= 1e-4 (STATUS.md); 5e-4 matches the original study and
-# keeps it comparable, and since aliasing inflates BOTH controllers equally
-# the robust-vs-optimistic *comparison* is unaffected.  Drop to 1e-4 (4x
-# cost) if you want the fully un-aliased regime.
+
 ROBUST_DT = 5e-4
 SEED0 = 5000
 
@@ -91,11 +55,6 @@ def _robust_single(task, cfg, rho0, seed0):
 
 
 def _plot_robustness_cdf(outdir, exc_rob, exc_opt):
-    """Fig 8 -- empirical CDF of the per-path peak margin ratio max_t xi/eps
-    on the worst-case plant (kappa_min).  Plots the REAL ensembles passed in;
-    the boundary at ratio 1 is a gate and the breach region (>1) is shaded so
-    the optimistic tail past it is unmissable.  Matches the SciencePlots look
-    of the figsrc set, rendered through pgf+pdflatex (no dvipng needed)."""
     import matplotlib
     matplotlib.use("pgf")
     import matplotlib.pyplot as plt
@@ -207,8 +166,6 @@ def main():
 
     outdir = os.path.join(os.path.dirname(__file__), "..", "figures")
     os.makedirs(outdir, exist_ok=True)
-    # record the REAL per-path ratios behind the figure, so it can be
-    # re-plotted without re-running the 6*M-trajectory sweep.
     np.savez(os.path.join(outdir, "robustness_excursions.npz"),
              exc_rob=exc_worst["rob"], exc_opt=exc_worst["opt"],
              kappa_worst=kappa_min)

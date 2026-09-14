@@ -1,13 +1,5 @@
 """
 Strong-order-one Milstein propagation of the controlled SME (Section IV-H).
-
-The state is carried as the generalised Bloch vector x in R^(N^2-1):
-
-    dx = F(x; u, gamma) dt + G(x) dW,
-
-    F_k = 2 <T_k, -i[H0 + sum u_i Hc_i, rho] + D[L]rho + sum gamma_j D[Lc_j]rho>
-    G_k = 2 sqrt(eta) <T_k, H[L] rho>,            <A,B> = Tr(A^dag B).
-
 The Milstein correction (G . grad) G is evaluated by a central finite
 difference of the vector field G along its own direction.
 """

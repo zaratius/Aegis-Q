@@ -1,19 +1,6 @@
 """
 Certified Bell Monte Carlo: the widened-funnel ensemble study.
 
-The E2 chattering study starts |00><00| inside the funnel but OUTSIDE the
-design shell (xi0 = 0.5 > 0.434), so Corollary III.2 is silent for it. This
-study runs the geometry of study_config.BELL_* -- eps0 = 0.85, theta_b =
-0.20, shell edge 0.68 > 0.5 -- where the certificate speaks, and verifies it:
-
-  * a-priori certified bound: bell_slack_envelope (feature-space reduction,
-    validated in test/test_bell_envelope.py) + closed_loop_bound;
-  * empirical shell-exit and funnel-exit rates with 95% Clopper-Pearson
-    intervals over an M-path ensemble;
-  * realized-slack a-posteriori bound (run_e1_acc.py convention);
-  * Delta t-refinement points showing the rates are not discretization
-    artifacts.
-
 Modes (results accumulate in bell_mc_results.json):
 
     python run_bell_mc.py [M]           main ensemble (default M = 1000)
@@ -95,7 +82,7 @@ def _one_path(k, cfg=None, seed0=SEED0):
     to keep M = 1000 transfers light.
     """
     sys_ = bell_system()
-    rho0 = bell_rho0_prep()          # imperfect preparation: see study_config
+    rho0 = bell_rho0_prep()          # imperfect preparation
     tr = run_trajectory(sys_, cfg, rho0, seed=seed0 + k, store=True)
     met = exit_metrics(tr, cfg.theta_b)
     return dict(metrics=met, xi=tr.xi.astype(np.float32),

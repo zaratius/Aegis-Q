@@ -1,24 +1,5 @@
 """
-Figure generation for Section V-E (Bell-state instance).
-
-Two figures are produced:
-
-* ``fig_bell_chatter``  -- the E2 comparison: the coherent control u(t)
-  under the unregularized law (w_u = 1) and the regularized law,
-  integrated from rho_0 = |00><00| on a SHARED Brownian path.  Companion
-  panels show the conditional infidelity xi(t) and the coherent gain
-  |beta^H_xi(t)|.
-
-* ``fig_chatter_robustness`` -- the control experiment that distinguishes a
-  genuine obstruction from a discretization artifact: the unregularized
-  control sign-flip fraction as a function of the integration step Delta t,
-  for the qubit and the Bell instance.  A discretization artifact would
-  vanish as Delta t -> 0; a genuine obstruction persists.  Both curves rise
-  to a plateau, confirming the chattering of Proposition V.2 is Delta t
-  -robust.
-
-These are reference figures.  Numerical values must be checked against the
-analytic derivation before use in the paper.
+Figure generation
 """
 from __future__ import annotations
 import os
@@ -33,16 +14,15 @@ _PGF_PREAMBLE = "\n".join([
 ])
 
 import matplotlib.pyplot as plt
-import scienceplots  # noqa: F401  (registers the 'science'/'ieee'/... styles)
+import scienceplots 
 
 from .systems import bell, qubit
 from .barrier import ExpFunnel
 from .simulate import SimConfig, run_trajectory
 
 
-# --------------------------------------------------------------------------
-# styling -- matches the manuscript figures (IEEEtran, serif, orange/teal)
-# --------------------------------------------------------------------------
+
+# styling 
 def _style():
     """Apply the manuscript figure style.
 
@@ -58,7 +38,7 @@ def _style():
         "pgf.texsystem": "pdflatex",
         "pgf.rcfonts": False,
         "pgf.preamble": _PGF_PREAMBLE,
-        "text.usetex": False,            # pgf renders through pdflatex itself
+        "text.usetex": False,            
         "axes.grid.axis": "y",
         "grid.color": "#E9E9E9", "grid.linewidth": 0.4, "grid.alpha": 0.6,
         "legend.frameon": False,
@@ -69,29 +49,20 @@ def _style():
     })
 
 
-# manuscript palette -- sampled from the Section V figures
-_C_UNREG = "#BF0606"      # unregularized / first series -- red
-_C_REG = "#000000"        # regularized   / second series -- teal
-_C_BLUE = "#00629b"       # tertiary series -- blue (E1/E3 ensembles)
-_C_AUX = "#8A8A8A"        # auxiliary lines (funnel, references) -- grey
+#palette
+_C_UNREG = "#BF0606"      
+_C_REG = "#000000"        
+_C_BLUE = "#00629b"       
+_C_AUX = "#8A8A8A"        
 
 # rate-axis label: time is in units of the measurement rate Gamma_m = 1
 _T_LABEL = r"time  $t$ ($\Gamma_m^{-1}$)"
 _DT_LABEL = r"integration step  $\Delta t$ ($10^{-4}\,\Gamma_m^{-1}$)"
 
 
-# --------------------------------------------------------------------------
 # E2 -- Bell chattering, unregularized vs regularized on a shared noise path
-# --------------------------------------------------------------------------
 def fig_bell_chatter(outdir: str, seed: int = 7,
                      dt: float = 2.5e-4, T: float = 2.0) -> str:
-    """Generate the E2 figure.  Returns the output path.
-
-    Uses kappa = 50 (kappa/Gamma_m = 50): with the Section V-E table value
-    kappa = 5 the engineered dissipators cannot stabilize Phi+ at all (see
-    STATUS.md), so the figure would show no stabilization.  The funnel is
-    sized to the resulting xi envelope.
-    """
     _style()
     sys_ = bell(kappa=(50.0, 50.0, 50.0))
     ket00 = np.zeros(4, dtype=complex); ket00[0] = 1.0
@@ -118,11 +89,6 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     ax[0].legend(loc="upper left", frameon=False, fontsize=8)
     ax[0].axhline(0, color=_C_AUX, lw=0.4)
 
-    # --- magnification inset: resolve the sign-flips into a sawtooth -----
-    # Pick a short window after the chattering onset.  The onset is where
-    # the unregularized control first saturates; take a window a little
-    # past it so the inset shows steady bang-bang switching, and make it
-    # narrow enough (~25 steps) that individual flips are visible.
     u_un = tr_un.u[:, 0]
     sat = np.where(np.abs(u_un) > 0.5)[0]
     onset = int(sat[0]) if sat.size else len(u_un) // 3
@@ -144,7 +110,6 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
     for spine in axins.spines.values():
         spine.set_visible(True)
         spine.set_linewidth(0.5)
-    # box the source region on the main axes and connect it to the inset
     ax[0].indicate_inset_zoom(axins, edgecolor=_C_AUX, lw=0.5, alpha=0.6)
 
     # panel 2: conditional infidelity xi(t) with the funnel
@@ -164,25 +129,21 @@ def fig_bell_chatter(outdir: str, seed: int = 7,
                label="regularized")
     ax[2].set_ylabel(r"coherent gain  $|\beta^H_\xi|$")
     ax[2].set_xlabel(_T_LABEL)
-    # legend in the clear pre-chattering region (t < 0.85); upper right sits
-    # on the saturated band and is illegible in print
     ax[2].legend(loc="upper left", frameon=False, fontsize=8)
 
     fig.align_ylabels(ax)
-    # figure title carried by the LaTeX caption
+    # figure title
     path = os.path.join(outdir, "fig_bell_chatter.pdf")
     fig.savefig(path)
     plt.close(fig)
     return path
 
 
-# --------------------------------------------------------------------------
-# control experiment -- chattering is Delta t-robust, not an artifact
-# --------------------------------------------------------------------------
+
 def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
                           t_curve, ci=None, sb_curve=None,
                           bound=None) -> str:
-    """E1 figure: qubit funnel confinement and Monte Carlo summary.
+    """figure: qubit funnel confinement and Monte Carlo summary.
 
     Parameters
     ----------
@@ -236,7 +197,6 @@ def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
     if bound is not None:
         lines.append(rf"$\mathbb{{P}}[\tau_\Omega\le T]\le{bound:.3f}$")
     if lines:
-        # anchored above the funnel tail so neither curve is occluded
         ax.text(0.98, 0.18, "\n".join(lines), transform=ax.transAxes,
                 fontsize=7.5, color=_C_AUX, ha="right", va="bottom",
                 zorder=5, bbox=dict(facecolor="white", edgecolor="none",
@@ -252,35 +212,12 @@ def fig_qubit_confinement(outdir: str, trajs: list, eps_curve,
 def fig_bell_confinement(outdir: str, t, eps_curve, sb_curve,
                          xi_paths, funnel_breached, ci=None,
                          bound=None, u_paths=None, bH_paths=None) -> str:
-    """Certified Bell MC figure: ensemble confinement, parallel to
-    fig_qubit_confinement, optionally completed with the applied coherent
-    control and the coherent gain along the same sample paths.
-
-    Parameters
-    ----------
-    t            : shared time grid (n_steps,)
-    eps_curve    : funnel epsilon(t) on that grid
-    sb_curve     : shell edge (1-theta_b) epsilon(t) on that grid
-    xi_paths     : list/array of xi(t) sample paths (all M, used for the
-                   pointwise frequency; a subset is drawn individually)
-    funnel_breached : boolean per path, True if xi >= eps ever
-    ci           : optional (point, lo, hi) funnel-confinement fraction
-    bound        : optional certified shell-exit bound to annotate
-    u_paths      : optional per-path u_1(t) traces (same length as
-                   xi_paths); adds a control panel
-    bH_paths     : optional per-path |beta^H_1(t)| traces; adds a gain panel
-    """
     _style()
     xi_paths = [np.asarray(x, dtype=float) for x in xi_paths]
     M = len(xi_paths)
     n_show = min(25, M)
     extra = u_paths is not None and bH_paths is not None
 
-    # the pgf backend emits every vertex as TeX tokens; at T/dt = 16000
-    # steps x 25 paths x 3 spaghetti panels TeX's memory overflows. Drawn
-    # curves are decimated to ~2000 vertices (far beyond print resolution);
-    # all statistics (confinement frequency) are computed at full
-    # resolution before decimation.
     stride = max(1, len(np.asarray(t)) // 2000)
     td = np.asarray(t, dtype=float)[::stride]
 
@@ -295,8 +232,6 @@ def fig_bell_confinement(outdir: str, t, eps_curve, sb_curve,
                            sharex=True, squeeze=False)
     ax = ax[:, 0]
 
-    # drawn subset: at most 5 breaching paths (rare event visible without
-    # repainting a mostly-confined ensemble red), the rest confined
     breach_idx = [i for i in range(M) if funnel_breached[i]][:5]
     conf_idx = [i for i in range(M) if not funnel_breached[i]]
     chosen = breach_idx + conf_idx[:n_show - len(breach_idx)]
@@ -328,16 +263,12 @@ def fig_bell_confinement(outdir: str, t, eps_curve, sb_curve,
     if bound is not None:
         lines.append(rf"$\mathbb{{P}}[\tau_\Omega\le T]\le{bound:.3f}$")
     if lines:
-        # anchored above the funnel tail so neither curve is occluded
         ax[0].text(0.98, 0.28, "\n".join(lines), transform=ax[0].transAxes,
                    fontsize=7.5, color=_C_AUX, ha="right", va="bottom",
                    zorder=5, bbox=dict(facecolor="white", edgecolor="none",
                                        alpha=0.85, pad=1.5))
 
     if extra:
-        # same subset, same colors: the applied coherent control and the
-        # coherent gain the law responds to (first channel; the
-        # preparation tilt sits on qubit 1)
         for i in chosen:
             ax[1].plot(td, _dec(u_paths[i]),
                        **_pathstyle(funnel_breached[i]))
@@ -403,35 +334,10 @@ def fig_chatter_robustness(outdir: str, seed: int = 7,
 
 
 
-# --------------------------------------------------------------------------
+
 # E3 -- funnel feasibility check
-# --------------------------------------------------------------------------
 def feasibility_data(trajs: list, funnel, umax: float, gmax: float,
                      shell: float = 0.85):
-    """Pointwise feasibility margin, with the boundary-shell restriction.
-
-    Under the funnel gauge the speed limit at a state rho carries the
-    prefactor eps/xi (revised Proposition III.2):
-
-        Phi(rho,t) = (eps/xi) [ sum |beta^H_i| u_max + sum |beta^D_j| g_max
-                                - mu - (1/2) kappa_V sigma^2 ],
-
-    and the funnel is feasible at rho iff |eps_dot| <= Phi.  The stored
-    gauge alpha is  mu - (xi/eps) eps_dot + (1/2) kappa_V sigma^2, so
-    -mu - (1/2) kappa_V sigma^2 = -alpha - (xi/eps) eps_dot, and
-
-        Phi = (eps/xi) ( sum|bH| u_max + sum|bD| g_max - alpha ) - eps_dot.
-
-    The condition is only meaningful where the barrier is active, i.e. where
-    the state is in the outer shell of the funnel,  xi > shell * eps.  Deep
-    inside the funnel the actuation gains vanish (the state is at the
-    target) and Phi < |eps_dot| there carries no information -- there is no
-    confinement demand to meet.  The figure therefore evaluates Phi on the
-    boundary shell only.
-
-    Returns (t, demand, V_min_shell, V_med_shell, infeasible_mask) where the
-    shell quantities are nan at times no ensemble member is in the shell.
-    """
     t = trajs[0].t
     eps_dot = np.asarray(funnel.eps_dot(t))
     demand = np.abs(eps_dot)
@@ -464,7 +370,7 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
     t, demand, V_min, V_med, infeas = feasibility_data(
         trajs, funnel, umax, gmax, shell)
 
-    # E1 breach onsets
+    # E1 breach
     breach_t = []
     for tr in trajs:
         out = np.where(tr.xi >= tr.eps)[0]
@@ -506,9 +412,8 @@ def fig_feasibility(outdir: str, trajs: list, funnel, umax: float,
     return path
 
 
-# --------------------------------------------------------------------------
-# Figure 1 -- breach-rate step refinement (Section V-E4)
-# --------------------------------------------------------------------------
+
+# Figure 1 -- breach-rate step refinement
 def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
                           alias_dt=2.0e-4):
     """Shell-exit rate vs Delta t for the qubit ensemble.
@@ -518,10 +423,7 @@ def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
     dt > alias_dt are drawn hollow: at Omega = 20 the closed loop aliases
     there (STATUS.md) and those points do not belong to the continuum trend.
     """
-    # local style (kept self-contained; matches _style() palette). The pgf
-    # preamble must be set here as well: this function does not go through
-    # _style(), and without amssymb the \mathbb in the y-label halts the
-    # pdflatex run at savefig time.
+    # local style
     _C_REG = "#1a9988"; _C_AUX = "#7f7f7f"
     plt.rcParams.update({"font.family": "serif", "font.size": 9,
                          "axes.grid": True, "grid.color": "#d9d9d9",
@@ -535,7 +437,6 @@ def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
     lo = np.asarray(ci_los, float)
     hi = np.asarray(ci_his, float)
  
-    # O(dt) reference anchored at the FINEST un-aliased point, extended up
     smooth = dts <= alias_dt
     anchor = int(np.argmin(dts))           # finest dt
     ref = rates[anchor] * dts / dts[anchor]
@@ -567,33 +468,11 @@ def fig_breach_refinement(outdir, dts, shell_rates, ci_los, ci_his,
     plt.close(fig)
     return path
 
-# --------------------------------------------------------------------------
-# Section V-E8 -- robustness to dissipative-rate uncertainty
-# --------------------------------------------------------------------------
+
+# robustness to dissipative-rate uncertainty
 def fig_robustness(outdir: str, plant_kappas, freq_rob, ci_rob,
                    freq_opt, ci_opt, exc_rob, exc_opt,
                    worst_kappa: float) -> str:
-    """Robust vs optimistic controller under dissipative-rate uncertainty.
-
-    Panel A -- confinement frequency of the robust controller (coefficients
-    computed from the worst-case rate kappa_min) and the optimistic
-    controller (coefficients from kappa_max), each run against true plants
-    at several kappa.  The two confine at comparable frequency:
-    Proposition IV.3 does not promise a higher confinement frequency under
-    model uncertainty.
-
-    Panel B -- on the worst-case plant kappa = kappa_min, the distribution
-    of the per-path maximum margin ratio max_t xi/epsilon.  This is where
-    the robust design pays off: by computing its coefficients from the
-    worst-case model it bounds the post-control drift, so its excursions
-    stay close to the funnel, whereas the optimistic controller -- having
-    over-estimated the dissipative authority -- cannot arrest a drifting
-    path and produces a heavy tail of large excursions.
-
-    ``freq_*`` are arrays over ``plant_kappas``; ``ci_*`` are matching
-    arrays of (lo, hi) pairs; ``exc_*`` are 1-D arrays of the per-path
-    max xi/epsilon on the worst-case plant.
-    """
     _style()
     plant_kappas = np.asarray(plant_kappas, float)
     fr = np.asarray(freq_rob, float); fo = np.asarray(freq_opt, float)
@@ -604,7 +483,7 @@ def fig_robustness(outdir: str, plant_kappas, freq_rob, ci_rob,
     fig, ax = plt.subplots(2, 1, figsize=(5.4, 6.2),
                            gridspec_kw={"height_ratios": [1, 1], "hspace": 0.42})
 
-    # ---- panel A: confinement frequency, grouped bars ------------------
+    # panel A: confinement frequency, grouped bars
     x = np.arange(len(plant_kappas))
     w = 0.36
     ax[0].bar(x - w / 2, fr, w, color=_C_REG,
@@ -623,7 +502,7 @@ def fig_robustness(outdir: str, plant_kappas, freq_rob, ci_rob,
     ax[0].set_ylim(0.0, 1.18)
     ax[0].legend(frameon=False, fontsize=7.5, loc="lower left", ncol=2)
 
-    # ---- panel B: excursion severity on the worst-case plant -----------
+    # panel B: excursion severity on the worst-case plant
     top = max(exc_rob.max(), exc_opt.max(), 1.05) * 1.10
     bins = np.linspace(0.0, top, 26)
     ax[1].hist(exc_rob, bins=bins, color=_C_REG, alpha=0.75,

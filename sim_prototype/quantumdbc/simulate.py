@@ -1,16 +1,4 @@
-"""
-Closed-loop driver: Algorithm 1 of the manuscript.
-
-Each step performs (i) coefficient evaluation, (ii) closed-form QP solution,
-(iii) Milstein propagation.  The law is Markovian: each step's QP depends
-on the current (rho, t) only.
-
-The controller may be run on a *model* that differs from the true plant
-(the ``design_sys`` argument of ``run_trajectory``).  This realises the
-robust / parametrically-mismatched controller of Proposition IV.3 and the
-Section V-E8 study: the QP coefficients are evaluated on the design model
-while the state is propagated by the true plant.
-"""
+#Closed-loop driver: Algorithm 1 of the manuscript.
 from __future__ import annotations
 from dataclasses import dataclass, field
 import numpy as np
@@ -98,18 +86,6 @@ def run_trajectory(sys: System, cfg: SimConfig, rho0: np.ndarray,
                    design_sys: System | None = None,
                    backend: str = "numba",
                    t_stop: float | None = None) -> Trajectory:
-    """Integrate one closed-loop sample path (Algorithm 1).
-
-    Identical interface and result to the reference implementation; by default
-    it runs the compiled Numba kernel (``quantumdbc.kernel``), which reproduces
-    the reference trajectory to ~machine precision under a given ``seed``.  Pass
-    ``backend="python"`` to force the pure-Python reference path (used for
-    cross-validation, and the automatic fallback when Numba is unavailable).
-    ``t_stop`` caps the integration at ``round(t_stop/dt)`` steps while keeping
-    the full funnel geometry (rate set by ``funnel.T``) -- an early stop for
-    exit-rate sweeps where all exits occur well before the horizon.
-    See ``_run_trajectory_python`` for the full parameter documentation.
-    """
     if backend != "numba" or not _kernel.HAVE_NUMBA:
         return _run_trajectory_python(sys, cfg, rho0, seed=seed, store=store,
                                       design_sys=design_sys, t_stop=t_stop)
@@ -242,16 +218,12 @@ def _run_trajectory_python(sys: System, cfg: SimConfig, rho0: np.ndarray,
         V = float(barrier.V(s, eps_t))
         kappa_V = float(barrier.kappa_V(s))
 
-        # controller coefficients -- evaluated on the design model, which
-        # equals the plant unless a robust/mismatched design is requested
         co = coefficients_generic(ctrl_sys, rho)
         betaH = np.atleast_1d(co["betaH"]).astype(float)
         betaD = np.atleast_1d(co["betaD"]).astype(float)
         sigma = float(co["sigma"])
         mu = float(co["mu"])
 
-        # gauge alpha: the contraction charge carries the factor xi/eps,
-        # vanishing at the target (revised eq. for alpha)
         alpha = (mu - (xi / eps_t) * float(fun.eps_dot(t))
                  + 0.5 * kappa_V * sigma ** 2)
 

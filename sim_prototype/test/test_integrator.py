@@ -1,5 +1,5 @@
 """
-Strong-convergence test for the Milstein integrator (Section IV-H).
+Strong-convergence test for the Milstein integrator
 
 A reference path is integrated at a fine step; coarser steps reuse the same
 Brownian path by summing increments.  The strong error E||x_T - x_T^ref||

@@ -1,9 +1,4 @@
-"""Fig 6 -- funnel feasibility on the design-shell boundary, funnel gauge.
-(a) contraction demand |eps_dot| against the speed limit V(t) for the
-admissible buffer, green headroom filled; (b) feasibility margin V-|eps_dot|
-for two buffers, zero line bold so the inadmissible dip below it is the
-obvious event. The speed limit carries the gauge prefactor eps/xi
-(revised Proposition III.2); the buffer is relative, s_b(t) = theta_b eps(t)."""
+#Fig 3 -- funnel feasibility on the design-shell boundary
 import os, sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sim_prototype'))
 import numpy as np, matplotlib.pyplot as plt
 import paper_style as ps; ps.apply()
@@ -12,18 +7,15 @@ from quantumdbc.coefficients import coefficients_generic
 from quantumdbc.barrier import ExpFunnel
 
 sys_ = qubit(); fun = ExpFunnel(eps0=0.70, eps_T=0.0001, T=4.0)
-umax, gmax = 1.0, 3.90            # gmax=3.90: edge-defensibility at (theta_b=0.20, eps_T->0)
-TB_ADM, TB_TIGHT = 0.20, 0.07     # theta_b=0.20 admissible GIVEN gmax=3.90; tight buffer for contrast
+umax, gmax = 1.0, 3.90            
+TB_ADM, TB_TIGHT = 0.20, 0.07     
 
 
 def speed_limit_at_boundary(t, theta_b):
-    # Evaluate on the design-shell boundary dOmega(t) = {xi = (1-theta_b) eps},
-    # where the barrier is active and the margin equals the buffer width
-    # s = theta_b eps -- the collar edge where the noise pressure is largest.
     eps = float(fun.eps(t)); epsdot = float(fun.eps_dot(t))
     xi = (1.0 - theta_b) * eps
     zeta = 1.0 / (theta_b * eps)
-    pref = eps / xi                        # gauge prefactor, = 1/(1-theta_b)
+    pref = eps / xi                        
     best = np.inf
     for c2 in np.linspace(-0.45, 0.45, 60):
         r = np.array([[1 - xi, c2 / 2], [c2 / 2, xi]], dtype=complex)

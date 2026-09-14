@@ -1,33 +1,12 @@
 """
-Shared figure style for the QDBC set (IEEE TAC) -- now built on SciencePlots.
-
-We apply SciencePlots' ['science', 'ieee', 'grid'] and render it through the
-pgf backend with pdflatex, so the text is true Computer Modern (matching the
-IEEEtran body) and NO external dvipng/ghostscript is required -- only a working
-pdflatex (the same dependency the project already had).  The semantic colour
-palette and the compact per-figure sizes are layered on top.
-
+Shared figure style for the QDBC set (IEEE TAC) -- built on SciencePlots.
 Requires:  pip install SciencePlots      (import name: scienceplots)
-
-Semantic palette (used identically everywhere; colour + linestyle, so panels
-survive grayscale):
-    funnel boundary eps(t)        black, solid       C_FUNNEL
-    shell / buffer / shell-exit   blue,  dashed      C_SHELL  / LS_SHELL
-    funnel-exit / breach / unreg  vermillion, solid  C_BREACH
-    confined / nominal            grey,  dotted      C_CONFINED / LS_CONF
-    speed limit / feasible / reg  green, solid       C_FEASIBLE
-
-If you have a full LaTeX toolchain with dvipng + ghostscript and prefer the
-canonical SciencePlots usetex pipeline, drop the pgf lines in apply() and use
-plt.style.use(['science','ieee','grid']) directly (text.usetex stays True).
-To go LaTeX-free entirely, use ['science','ieee','grid','no-latex'] and change
-the one '\\%' label in fig_qubit.py back to '%'.
 """
 import matplotlib
 matplotlib.use("pgf")
 
-import matplotlib.pyplot as plt  # noqa: E402
-import scienceplots  # noqa: E402,F401  (registers the 'science'/'ieee'/... styles)
+import matplotlib.pyplot as plt  
+import scienceplots  
 
 # ---- canvas widths (inches) ------------------------------------------------
 COL = 3.40      # one IEEE column

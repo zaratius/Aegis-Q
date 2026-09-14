@@ -1,25 +1,10 @@
 """
 Accelerated E1 qubit confinement: the M = 1000 ensemble for Section V-E4.
 
-REVISED:
-  * Imports the SHARED study geometry (study_config) so this figure and the
-    breach figure describe ONE system.  The old config here was
-    (0.55, 0.08, s_b=0.04) -- a different funnel and buffer from the breach
-    script's (0.70, 0.12, s_b=0.25), which made the feasibility-vs-confinement
-    story impossible to write honestly.
-  * Reports BOTH exit events (shell-exit tau_Omega, funnel-exit tau_aleph)
-    and the corrected Corollary III.2 shell bound, which uses the V-space
-    slack Delta(T) = sum(delta/s) dt (the 1/s factor was missing before) and
-    the constant funnel-gauge level log(1/theta_b) -- not the old
-    2.4/Lambda -> 0 reasoning, which was the source of the contradiction.
-
     python scripts/run_e1_acc.py
 """
 
-# -------------------------------------------------------------------------
-# APPLE ACCELERATE GRIDLOCK PREVENTION (must precede any numpy import,
-# including in spawned children)
-# -------------------------------------------------------------------------
+# APPLE ACCELERATE GRIDLOCK PREVENTION
 import os
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -48,14 +33,7 @@ def clopper_pearson(k, n, alpha=0.05):
     hi = stats.beta.ppf(1 - alpha / 2, k + 1, n - k) if k < n else 1.0
     return lo, hi
 
-
-# Seed base for the E1 ensemble. History: the paper's original M = 1000
-# ensemble (92.7% funnel-respect, CI [90.9, 94.2]) ran at SEED0 = 1000;
-# changed to 5000 on 2026-08-08 (fresh draw, same law/geometry) -- the
-# figure annotation numbers shift within CI noise, so re-sync the numbers
-# quoted in Applications (deadline paragraph) with the new printout.
 SEED0 = 5000
-
 
 def _simulate_single_path(k, sys_, cfg, rho0):
     return run_trajectory(sys_, cfg, rho0, seed=SEED0 + k, store=True)
@@ -82,7 +60,7 @@ def main():
         trajs = list(pool.map(task, range(M)))
     print(f"  ensemble integrated in {time.time() - t0:.0f}s")
 
-    # --- the two exit events, computed consistently for every path ---
+    # the two exit events, computed consistently for every path
     mets = [exit_metrics(tr, cfg.theta_b) for tr in trajs]
     n_shell  = sum(m["shell_exit"]  for m in mets)
     n_funnel = sum(m["funnel_exit"] for m in mets)
@@ -96,7 +74,7 @@ def main():
           f"{n_funnel}/{M} = {100*n_funnel/M:.1f}%  "
           f"95% CI [{100*lf:.1f}, {100*hf:.1f}]")
 
-    # --- funnel-gauge Corollary III.2 shell bound (constant exit level) ---
+    # funnel-gauge Corollary III.2 shell bound (constant exit level)
     Delta_T = float(np.mean([m["Delta_T"] for m in mets]))   # ensemble mean
     V_level = mets[0]["V_level"]                             # log(1/theta_b)
     xi0     = float(trajs[0].xi[0])
@@ -111,8 +89,6 @@ def main():
     print("   qubit_nu_envelope + closed_loop_bound -- and is what Table I")
     print("   and Section V-E4 report)")
 
-    # certified a-priori bound for the figure annotation (coarse envelope
-    # grid; the value is ladder-stable to <1e-4, see the redesign memo)
     from quantumdbc import qubit_slack_envelope, closed_loop_bound
     t0 = time.time()
     tg, dbar = qubit_slack_envelope(sys_, cfg, n_x3=161, n_x2=81)
@@ -122,7 +98,7 @@ def main():
 
     outdir = os.path.join(os.path.dirname(__file__), "..", "figures")
     os.makedirs(outdir, exist_ok=True)
-    n_conf = M - n_funnel                  # funnel-confined: never crossed eps
+    n_conf = M - n_funnel                  
     lc, hc = clopper_pearson(n_conf, M)
     p = fig_qubit_confinement(outdir, trajs, funnel.eps(trajs[0].t),
                               trajs[0].t, ci=(n_conf / M, lc, hc),

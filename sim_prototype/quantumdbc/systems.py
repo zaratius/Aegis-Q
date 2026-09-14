@@ -1,27 +1,11 @@
 """
 Operator data for the three Quantum Dynamic Barrier Control instances.
-
-Conventions
------------
-* Generators {T_k}, k = 1 .. N^2-1, are the traceless Hermitian generators
-  of su(N), normalised by  <T_j, T_k> = Tr(T_j^dag T_k) = (1/2) delta_jk.
-  This is the convention of eq. (42) of the manuscript, used uniformly for
-  every N.  For N = 2, 3 it coincides with sigma_k/2 and lambda_k/2.
-* A density operator is rho = I/N + sum_k x_k T_k, hence x_k = 2 Tr(T_k rho).
-
-The qutrit and Bell operators are the *corrected* data of the Section V
-rewrite: the qutrit uses two engineered dissipators that each pump an
-excited level directly to the ground state, and the Bell measurement is a
-joint-parity readout L = sqrt(Gamma_m) sigma_z (x) sigma_z (QND w.r.t.
-|Phi+>).
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
 import numpy as np
 
-# --------------------------------------------------------------------------
 # Pauli matrices
-# --------------------------------------------------------------------------
 I2 = np.eye(2, dtype=complex)
 SX = np.array([[0, 1], [1, 0]], dtype=complex)
 SY = np.array([[0, -1j], [1j, 0]], dtype=complex)
@@ -29,9 +13,7 @@ SZ = np.array([[1, 0], [0, -1]], dtype=complex)
 SM = np.array([[0, 1], [0, 0]], dtype=complex)        # |0><1|, lowering to ground
 
 
-# --------------------------------------------------------------------------
-# Generalised Gell-Mann basis: traceless Hermitian, Tr(T_j T_k) = delta_jk/2
-# --------------------------------------------------------------------------
+# Generalised Gell-Mann basis
 def ggm_generators(N: int) -> list[np.ndarray]:
     """Return the N^2-1 generators of su(N), normalised to Tr(T_jT_k)=delta/2."""
     gens: list[np.ndarray] = []
@@ -71,9 +53,8 @@ def check_normalisation(gens: list[np.ndarray], tol: float = 1e-12) -> bool:
     return True
 
 
-# --------------------------------------------------------------------------
+
 # System container
-# --------------------------------------------------------------------------
 @dataclass
 class System:
     """Operator data for one instance.
@@ -113,9 +94,7 @@ class System:
         return len(self.Lc)
 
 
-# --------------------------------------------------------------------------
 # Instance constructors
-# --------------------------------------------------------------------------
 def qubit(omega_q=5.0, Omega=20.0, Gamma_m=1.0, kappa=5.0, eta=0.6) -> System:
     """Qubit ground-state stabilisation, eq. (50) of the rewrite."""
     Pi = np.array([[1, 0], [0, 0]], dtype=complex)
