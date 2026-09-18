@@ -3,7 +3,6 @@
 
 !.gitignore
 !README.md
-!regen_figures.sh
 
 !sim_prototype/quantumdbc/*.py
 !sim_prototype/test/*.py
