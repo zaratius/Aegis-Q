@@ -45,8 +45,8 @@ def panel(ax, knob, xlabel, fmt):
 
 fig, (axa, axb) = plt.subplots(1, 2, figsize=(ps.COL, 1.72), sharey=True,
                                constrained_layout=True)
-panel(axa, 'eta', r'efficiency $\eta$', lambda v: f'{v:g}')
-panel(axb, 'dt', r'integration step $\Delta t$ ($10^{-4}\,\Gamma_m^{-1}$)', lambda v: f'{v*1e4:g}')
+panel(axa, 'eta', r'$\eta$', lambda v: f'{v:g}')
+panel(axb, 'dt', r'$\Delta t$ ($10^{-4}\,\Gamma_m^{-1}$)', lambda v: f'{v*1e4:g}')
 axa.set_ylabel('exit probability')
 axa.text(0.04, 0.93, '(a)', transform=axa.transAxes, fontsize=7)
 axb.text(0.04, 0.93, '(b)', transform=axb.transAxes, fontsize=7)

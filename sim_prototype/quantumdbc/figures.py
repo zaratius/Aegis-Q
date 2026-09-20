@@ -42,7 +42,7 @@ def _style():
         "axes.grid.axis": "y",
         "grid.color": "#E9E9E9", "grid.linewidth": 0.4, "grid.alpha": 0.6,
         "legend.frameon": False,
-        "font.size": 8, "axes.titlesize": 8, "axes.labelsize": 8,
+        "font.size": 12, "axes.titlesize": 12, "axes.labelsize": 12,
         "xtick.labelsize": 7, "ytick.labelsize": 7, "legend.fontsize": 7,
         "savefig.dpi": 600, "figure.dpi": 150,
         "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
